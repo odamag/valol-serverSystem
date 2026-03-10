@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P2P Pong Game</title>
+    <!-- PeerJSライブラリの読み込み -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+            touch-action: none; /* モバイルでのスクロール防止 */
+        }
+
+        /* セットアップ画面のスタイル */
+        #setup-screen {
+            text-align: center;
+            z-index: 10;
+        }
+
+        input {
+            padding: 10px;
+            font-size: 18px;
+            border: 2px solid #fff;
+            background: #000;
+            color: #fff;
+            margin-bottom: 10px;
+            width: 200px;
+            text-align: center;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 18px;
+            background: #fff;
+            color: #000;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background: #ccc;
+        }
+
+        #status {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #0f0;
+        }
+
+        /* ゲーム画面のスタイル */
+        #game-screen {
+            display: none;
+            position: relative;
+        }
+
+        canvas {
+            border: 2px solid #fff;
+            max-width: 95vw;
+            max-height: 80vh;
+            display: block;
+        }
+
+        #score-board {
+            font-size: 40px;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- セットアップ画面 -->
+    <div id="setup-screen">
+        <h1>P2P PONG</h1>
+        <p>合言葉を入力して開始</p>
+        <input type="text" id="room-name" placeholder="例: secret123" maxlength="20"><br>
+        <button id="join-btn">接続する</button>
+        <button id="ready-btn" style="display: none;">スタート！</button>
+        <div id="status">待機中...</div>
+    </div>
+
+    <!-- ゲーム画面 -->
+    <div id="game-screen">
+        <div id="score-board">0 - 0</div>
+        <div id="ready-status" style="text-align: center; color: #ff0; margin-bottom: 5px; height: 20px;"></div>
+        <canvas id="pongCanvas"></canvas>
+        <p style="text-align: center; font-size: 12px;">マウスまたはタッチで操作</p>
+    </div>
+
+    <script>
+        /**
+         * 定数と設定
+         */
+        const CANVAS_WIDTH = 800;
+        const CANVAS_HEIGHT = 400;
+        const PADDLE_WIDTH = 10;
+        const PADDLE_HEIGHT = 80;
+        const BALL_SIZE = 10;
+        const INITIAL_BALL_SPEED = 2;
+        const SPEED_INCREMENT = 1.1; // パドルに当たるたびに加速
+        const TIME_ACCELERATION = 1.0001; // 1フレームごとに速度をこの倍率で上げる
+        const WIN_SCORE = 5;
+
+        const canvas = document.getElementById('pongCanvas');
+        const ctx = canvas.getContext('2d');
+        const setupScreen = document.getElementById('setup-screen');
+        const gameScreen = document.getElementById('game-screen');
+        const statusDiv = document.getElementById('status');
+        const scoreBoard = document.getElementById('score-board');
+        const readyStatus = document.getElementById('ready-status');
+        const roomInput = document.getElementById('room-name');
+        const joinBtn = document.getElementById('join-btn');
+        const readyBtn = document.getElementById('ready-btn');
+
+        canvas.width = CANVAS_WIDTH;
+        canvas.height = CANVAS_HEIGHT;
+
+        /**
+         * ゲーム状態
+         */
+        let gameState = {
+            ball: { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2, vx: 0, vy: 0 },
+            p1: { y: CANVAS_HEIGHT / 2 - PADDLE_HEIGHT / 2 },
+            p2: { y: CANVAS_HEIGHT / 2 - PADDLE_HEIGHT / 2 },
+            score: { p1: 0, p2: 0 },
+            isHost: false,
+            connected: false,
+            p1Ready: false,
+            p2Ready: false,
+            gameRunning: false
+        };
+
+        let peer = null;
+        let conn = null;
+        let myPaddleY = CANVAS_HEIGHT / 2 - PADDLE_HEIGHT / 2;
+
+        /**
+         * 通信処理 (PeerJS)
+         */
+        joinBtn.addEventListener('click', () => {
+            const rawRoomName = roomInput.value.trim();
+            const roomName = rawRoomName.replace(/[^a-zA-Z0-9]/g, '');
+            
+            if (!roomName) return alert('合言葉を英数字で入力してください');
+
+            joinBtn.disabled = true;
+            statusDiv.innerText = '接続を試みています...';
+
+            const hostId = `pong-${roomName}-1`;
+            const guestId = `pong-${roomName}-2`;
+
+            peer = new Peer(hostId);
+
+            peer.on('open', (id) => {
+                gameState.isHost = true;
+                statusDiv.innerText = '対戦相手を待っています... (合言葉: ' + roomName + ')';
+                initHostLogic();
+            });
+
+            peer.on('error', (err) => {
+                if (err.type === 'id-taken' || err.type === 'unavailable-id') {
+                    console.log('Host ID taken, attempting to join as guest...');
+                    if (peer) peer.destroy();
+                    startAsGuest(roomName, hostId, guestId);
+                } else {
+                    console.error('Peer Error:', err.type, err);
+                    statusDiv.innerText = 'エラーが発生しました: ' + err.type;
+                    joinBtn.disabled = false;
+                }
+            });
+        });
+
+        readyBtn.addEventListener('click', () => {
+            readyBtn.disabled = true;
+            readyBtn.innerText = '準備完了！';
+            if (gameState.isHost) {
+                gameState.p1Ready = true;
+            } else {
+                gameState.p2Ready = true;
+            }
+            // 相手に準備完了を伝える
+            if (conn && conn.open) {
+                conn.send({ type: 'READY' });
+            }
+            checkAllReady();
+        });
+
+        function checkAllReady() {
+            if (gameState.p1Ready && gameState.p2Ready) {
+                if (gameState.isHost) {
+                    gameState.gameRunning = true;
+                    resetBall();
+                }
+                setupScreen.style.display = 'none';
+                gameScreen.style.display = 'block';
+            }
+        }
+
+        // ゲストとして起動
+        function startAsGuest(roomName, hostId, guestId) {
+            peer = new Peer(guestId);
+            peer.on('open', (id) => {
+                gameState.isHost = false;
+                statusDiv.innerText = 'ホストに接続中...';
+                conn = peer.connect(hostId);
+                initConnection(conn);
+            });
+        }
+
+        // ホスト側の接続待機
+        function initHostLogic() {
+            peer.on('connection', (connection) => {
+                conn = connection;
+                initConnection(conn);
+                onConnected();
+            });
+        }
+
+        // 通信の共通初期化
+        function initConnection(connection) {
+            connection.on('open', () => {
+                gameState.connected = true;
+                if (!gameState.isHost) {
+                    onConnected();
+                }
+            });
+
+            connection.on('data', (data) => {
+                if (data.type === 'READY') {
+                    if (gameState.isHost) gameState.p2Ready = true;
+                    else gameState.p1Ready = true;
+                    checkAllReady();
+                    return;
+                }
+
+                if (data.type === 'GAME_OVER') {
+                    alert(data.winner + " Wins!");
+                    gameState.score.p1 = 0;
+                    gameState.score.p2 = 0;
+                    gameState.gameRunning = false;
+                    gameState.p1Ready = false;
+                    gameState.p2Ready = false;
+                    readyBtn.disabled = false;
+                    readyBtn.innerText = '再戦スタート！';
+                    setupScreen.style.display = 'block';
+                    gameScreen.style.display = 'none';
+                    return;
+                }
+
+                if (gameState.isHost) {
+                    // ホストはゲストのパドル位置を受け取る
+                    gameState.p2.y = data.paddleY;
+                } else {
+                    // ゲストはホストから送られてくるゲーム全体の状態を受け取る
+                    gameState.ball = data.ball;
+                    gameState.p1.y = data.p1y;
+                    gameState.p2.y = data.p2y;
+                    gameState.score = data.score;
+                    gameState.gameRunning = data.gameRunning;
+                    gameState.p1Ready = data.p1Ready;
+                    gameState.p2Ready = data.p2Ready;
+
+                    if (gameState.gameRunning && gameScreen.style.display === 'none') {
+                        setupScreen.style.display = 'none';
+                        gameScreen.style.display = 'block';
+                    }
+                    updateScoreDisplay();
+                }
+            });
+
+            connection.on('close', () => {
+                alert('通信が切断されました');
+                location.reload();
+            });
+        }
+
+        /**
+         * ゲームロジック
+         */
+        function onConnected() {
+            joinBtn.style.display = 'none';
+            readyBtn.style.display = 'inline-block';
+            statusDiv.innerText = '接続完了！「スタート！」を押してください。';
+            
+            // 描画ループだけ開始（物理演算はまだ）
+            requestAnimationFrame(gameLoop);
+        }
+
+        function resetBall() {
+            gameState.ball.x = CANVAS_WIDTH / 2;
+            gameState.ball.y = CANVAS_HEIGHT / 2;
+            
+            // 常に一定の速さ(INITIAL_BALL_SPEED)で、左右45度の範囲のランダムな角度に発射
+            const angle = (Math.random() * Math.PI / 2) - Math.PI / 4; // -45度 〜 45度
+            const direction = Math.random() > 0.5 ? 1 : -1;
+            
+            gameState.ball.vx = direction * INITIAL_BALL_SPEED * Math.cos(angle);
+            gameState.ball.vy = INITIAL_BALL_SPEED * Math.sin(angle);
+        }
+
+        function update() {
+            if (!gameState.isHost) {
+                // ゲストは自分の位置を送信するだけ
+                if (conn && conn.open) {
+                    conn.send({ paddleY: myPaddleY });
+                }
+                return;
+            }
+
+            if (!gameState.gameRunning) return;
+
+            // ホスト側の物理演算
+            const ball = gameState.ball;
+            ball.x += ball.vx;
+            ball.y += ball.vy;
+
+            // 時間経過による徐々な加速
+            ball.vx *= TIME_ACCELERATION;
+            ball.vy *= TIME_ACCELERATION;
+
+            // 壁との衝突 (上下)
+            if (ball.y <= 0 || ball.y >= CANVAS_HEIGHT - BALL_SIZE) {
+                ball.vy *= -1;
+            }
+
+            // パドルとの衝突 (左 - P1)
+            if (ball.vx < 0 && 
+                ball.x <= PADDLE_WIDTH && 
+                ball.y + BALL_SIZE >= gameState.p1.y && 
+                ball.y <= gameState.p1.y + PADDLE_HEIGHT) {
+                
+                const deltaY = (ball.y + BALL_SIZE / 2) - (gameState.p1.y + PADDLE_HEIGHT / 2);
+                const normalizedDeltaY = deltaY / (PADDLE_HEIGHT / 2);
+                const bounceAngle = normalizedDeltaY * (Math.PI / 4);
+
+                const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy) * SPEED_INCREMENT;
+                ball.vx = speed * Math.cos(bounceAngle);
+                ball.vy = speed * Math.sin(bounceAngle);
+                
+                ball.x = PADDLE_WIDTH;
+            }
+
+            // パドルとの衝突 (右 - P2)
+            if (ball.vx > 0 && 
+                ball.x >= CANVAS_WIDTH - PADDLE_WIDTH - BALL_SIZE && 
+                ball.y + BALL_SIZE >= gameState.p2.y && 
+                ball.y <= gameState.p2.y + PADDLE_HEIGHT) {
+                
+                const deltaY = (ball.y + BALL_SIZE / 2) - (gameState.p2.y + PADDLE_HEIGHT / 2);
+                const normalizedDeltaY = deltaY / (PADDLE_HEIGHT / 2);
+                const bounceAngle = normalizedDeltaY * (Math.PI / 4);
+
+                const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy) * SPEED_INCREMENT;
+                ball.vx = -speed * Math.cos(bounceAngle);
+                ball.vy = speed * Math.sin(bounceAngle);
+                
+                ball.x = CANVAS_WIDTH - PADDLE_WIDTH - BALL_SIZE;
+            }
+
+            // スコア判定
+            if (ball.x < 0) {
+                gameState.score.p2++;
+                checkWin();
+                resetBall();
+            } else if (ball.x > CANVAS_WIDTH) {
+                gameState.score.p1++;
+                checkWin();
+                resetBall();
+            }
+
+            // ホストのパドル位置を同期
+            gameState.p1.y = myPaddleY;
+
+            // ゲストに状態を送信
+            if (conn && conn.open) {
+                conn.send({
+                    ball: gameState.ball,
+                    p1y: gameState.p1.y,
+                    p2y: gameState.p2.y,
+                    score: gameState.score,
+                    gameRunning: gameState.gameRunning,
+                    p1Ready: gameState.p1Ready,
+                    p2Ready: gameState.p2Ready
+                });
+            }
+            updateScoreDisplay();
+        }
+
+        function checkWin() {
+            if (gameState.score.p1 >= WIN_SCORE || gameState.score.p2 >= WIN_SCORE) {
+                const winner = gameState.score.p1 >= WIN_SCORE ? "Player 1" : "Player 2";
+                
+                // ゲストに終了を通知
+                if (conn && conn.open) {
+                    conn.send({ type: 'GAME_OVER', winner: winner });
+                }
+
+                alert(winner + " Wins!");
+                gameState.score.p1 = 0;
+                gameState.score.p2 = 0;
+                // 勝利後はリセットして準備画面へ（ここだけは手動に戻す）
+                gameState.gameRunning = false;
+                gameState.p1Ready = false;
+                gameState.p2Ready = false;
+                readyBtn.disabled = false;
+                readyBtn.innerText = '再戦スタート！';
+                setupScreen.style.display = 'block';
+                gameScreen.style.display = 'none';
+            }
+        }
+
+        function updateScoreDisplay() {
+            scoreBoard.innerText = `${gameState.score.p1} - ${gameState.score.p2}`;
+            
+            // 準備状況の表示
+            if (!gameState.gameRunning) {
+                const p1Text = gameState.p1Ready ? "P1:OK" : "P1:待機中";
+                const p2Text = gameState.p2Ready ? "P2:OK" : "P2:待機中";
+                readyStatus.innerText = `${p1Text} | ${p2Text}`;
+            } else {
+                readyStatus.innerText = "";
+            }
+        }
+
+        /**
+         * 描画処理
+         */
+        function draw() {
+            // 背景クリア
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+            // 中央の点線
+            ctx.strokeStyle = '#fff';
+            ctx.setLineDash([10, 10]);
+            ctx.beginPath();
+            ctx.moveTo(CANVAS_WIDTH / 2, 0);
+            ctx.lineTo(CANVAS_WIDTH / 2, CANVAS_HEIGHT);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // パドル描画
+            // 左パドル (P1)
+            ctx.fillStyle = gameState.isHost ? '#0ff' : '#fff';
+            ctx.fillRect(0, gameState.p1.y, PADDLE_WIDTH, PADDLE_HEIGHT);
+            if (gameState.isHost) {
+                ctx.font = '12px Courier New';
+                ctx.fillText('YOU', PADDLE_WIDTH + 5, gameState.p1.y + PADDLE_HEIGHT / 2);
+            }
+
+            // 右パドル (P2)
+            ctx.fillStyle = !gameState.isHost ? '#0ff' : '#fff';
+            ctx.fillRect(CANVAS_WIDTH - PADDLE_WIDTH, gameState.p2.y, PADDLE_WIDTH, PADDLE_HEIGHT);
+            if (!gameState.isHost) {
+                ctx.font = '12px Courier New';
+                ctx.textAlign = 'right';
+                ctx.fillText('YOU', CANVAS_WIDTH - PADDLE_WIDTH - 5, gameState.p2.y + PADDLE_HEIGHT / 2);
+                ctx.textAlign = 'left';
+            }
+
+            // ボール描画
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(gameState.ball.x, gameState.ball.y, BALL_SIZE, BALL_SIZE);
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        /**
+         * 操作イベント
+         */
+        function handleMove(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            const scaleY = CANVAS_HEIGHT / rect.height;
+            const relativeY = (clientY - rect.top) * scaleY;
+            
+            myPaddleY = relativeY - PADDLE_HEIGHT / 2;
+
+            // 画面外はみ出し防止
+            if (myPaddleY < 0) myPaddleY = 0;
+            if (myPaddleY > CANVAS_HEIGHT - PADDLE_HEIGHT) myPaddleY = CANVAS_HEIGHT - PADDLE_HEIGHT;
+        }
+
+        window.addEventListener('mousemove', handleMove);
+        window.addEventListener('touchmove', handleMove, { passive: false });
+
+    </script>
+</body>
+</html>
