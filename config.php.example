@@ -1,0 +1,9 @@
+<?php
+// このファイルを config.php にコピーして自分の情報を入力してください
+$creds = [
+    'AWS_REGION' => 'ap-northeast-1',
+    'AWS_KEY'    => 'YOUR_ACCESS_KEY_HERE',
+    'AWS_SECRET' => 'YOUR_SECRET_KEY_HERE',
+    'MINECRAFT_LT_ID' => 'lt-xxxxxx',
+    'PALLWORLD_LT_ID' => 'lt-yyyyyy',
+];
