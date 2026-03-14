@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ライン通過ゲーム</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="gameInfo">
+            <div id="player1Score">プレイヤー1: 0</div>
+            <div id="player2Score">プレイヤー2: 0</div>
+            <div id="connectionStatus">接続状況: 待機中</div>
+        </div>
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="connectionPanel">
+            <input type="text" id="passwordInput" placeholder="合言葉を入力">
+            <button id="connectButton">接続</button>
+            <button id="startButton" disabled>ゲーム開始</button>
+        </div>
+        <div id="gameOver" class="hidden">
+            <h2>ゲーム終了</h2>
+            <p id="winnerText"></p>
+            <button id="restartButton">再開</button>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

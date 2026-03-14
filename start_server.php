@@ -3,6 +3,7 @@
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
+$creds = include('config.php');
 
 // ==========================================================
 // ★★★ 設定エリア ★★★
@@ -273,6 +274,8 @@ foreach ($servers as $key => $conf) {
         <a href="./minigame.html">ミニゲーム</a>
         <br/>
         <a href="./pong_p2p.html">エアホッケー</a>
+        <br/>
+        <a href="./linegame/index.html">ライン通過ゲーム</a>
     </div>
 </body>
 </html>
