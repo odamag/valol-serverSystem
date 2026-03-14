@@ -306,6 +306,7 @@ foreach ($servers as $key => $conf) {
         <a href="./pong_p2p.html">エアホッケー</a>
         <br/>
         <a href="./linegame/index.html">ライン通過ゲーム</a>
+        <br/>
         <a href="https://www.notion.so/Minecraft-Server-2fcb31a2feb68015b9f5fc19b6cf793f?source=copy_link">ノーション</a>
     </div>
 </body>

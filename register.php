@@ -2,6 +2,9 @@
 // アカウント作成ページ
 session_start();
 
+// QRコードライブラリの読み込み
+require_once 'qrcode_lib/qrlib.php';
+
 // DB接続
 try {
     $db = new PDO('sqlite:db-folder/auth.db');
@@ -23,10 +26,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $stmt = $db->prepare("INSERT INTO users (user_id, username, otp_secret) VALUES (?, ?, ?)");
         $stmt->execute([$user_id, $username, $otp_secret]);
         
-        // 登録成功メッセージとシークレットキーを表示
+        // OTP URIを生成（QRコード用）
+        $qr_uri = generate_otp_qr_url($user_id, $otp_secret, "AuthSystem");
+        
+        // 登録成功メッセージとシークレットキー、QRコードを表示
         $success = "アカウントが作成されました。以下はOTP生成用のシークレットキーです。これを安全な場所に保存してください。<br><br>";
         $success .= "<strong>" . $otp_secret . "</strong><br><br>";
-        $success .= "このキーを使って、OTP認証アプリ（例：Google Authenticator）を設定してください。";
+        $success .= "このキーを使って、OTP認証アプリ（例：Google Authenticator）を設定してください。<br><br>";
+        $success .= "<p><strong>または、以下のQRコードをスキャンして設定することもできます：</strong></p>";
+        $success .= "<p><img src='https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" . urlencode($qr_uri) . "' alt='QR Code'></p>";
+        $success .= "<p>このQRコードをOTP認証アプリ（例：Google Authenticator）でスキャンしてください。</p>";
         
     } catch(PDOException $e) {
         if ($e->getCode() == 23000) { // 重複エラー
