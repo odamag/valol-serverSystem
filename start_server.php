@@ -32,6 +32,20 @@ $servers = [
 ];
 // ==========================================================
 
+// DB接続
+try {
+    $db = new PDO('sqlite:db-folder/auth.db');
+    $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+} catch(PDOException $e) {
+    die("DB接続エラー: " . $e->getMessage());
+}
+
+// ユーザーがログインしているか確認
+session_start();
+$is_logged_in = isset($_SESSION['user_id']);
+$user_id = $_SESSION['user_id'] ?? null;
+$username = $_SESSION['username'] ?? null;
+
 // AWS SDKの読み込み
 if (!file_exists('aws.phar')) {
     die('<h2 style="color:red">エラー: aws.phar が見つかりません</h2>');
@@ -49,8 +63,8 @@ try {
         'version' => 'latest',
         'region'  => $aws_config['region'],
         'credentials' => [
-            'key'    => $aws_config['key'],
-            'secret' => $aws_config['secret']
+            'key'    => $creds['AWS_KEY'],
+            'secret' => $creds['AWS_SECRET']
         ],
     ]);
 } catch (Exception $e) {
@@ -196,6 +210,8 @@ foreach ($servers as $key => $conf) {
         button:disabled { background-color: #b2bec3; cursor: not-allowed; transform: none; }
         .btn-start { background: #0984e3; color: white; }
         .btn-stop { background: #d63031; color: white; margin-top: 10px; }
+        .header-links { margin-bottom: 20px; }
+        .header-links a { margin: 0 10px; color: #0984e3; text-decoration: none; }
     </style>
     <script>
         setTimeout(() => {
@@ -221,6 +237,20 @@ foreach ($servers as $key => $conf) {
 </head>
 <body>
     <h1>🎮 Server Controller</h1>
+    
+    <?php if ($is_logged_in): ?>
+        <div class="header-links">
+            <a href="./profile.php">マイページ</a>
+            <a href="./logout.php">ログアウト</a>
+        </div>
+        <p>ようこそ、<?php echo htmlspecialchars($username); ?> さん</p>
+    <?php else: ?>
+        <div class="header-links">
+            <a href="./login.php">ログイン</a>
+            <a href="./register.php">アカウント作成</a>
+        </div>
+    <?php endif; ?>
+    
     <?php if ($message): ?><p style="color:#d63031; font-weight:bold;"><?php echo $message; ?></p><?php endif; ?>
 
     <div class="container">
@@ -276,6 +306,7 @@ foreach ($servers as $key => $conf) {
         <a href="./pong_p2p.html">エアホッケー</a>
         <br/>
         <a href="./linegame/index.html">ライン通過ゲーム</a>
+        <a href="https://www.notion.so/Minecraft-Server-2fcb31a2feb68015b9f5fc19b6cf793f?source=copy_link">ノーション</a>
     </div>
 </body>
 </html>
