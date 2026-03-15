@@ -2,73 +2,61 @@
 // アカウント作成ページ
 session_start();
 
-// QRコードライブラリの読み込み
-require_once 'qrcode_lib/qrlib.php';
-
-// DB接続
-try {
-    $db = new PDO('sqlite:db-folder/auth.db');
-    $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-} catch(PDOException $e) {
-    die("DB接続エラー: " . $e->getMessage());
+// 既にログインしている場合はマイページにリダイレクト
+if (isset($_SESSION['user_id'])) {
+    header("Location: ./start_server.php");
+    exit();
 }
+
+$error = "";
+$success = "";
 
 // アカウント作成処理
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'register') {
-    $user_id = $_POST['user_id'];
-    $username = $_POST['username'];
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $id = $_POST['id'] ?? '';
+    $username = $_POST['username'] ?? '';
     
-    // ランダムなシークレットキーを生成（Base32形式）
-    $otp_secret = base32_encode(random_bytes(10));
-    
-    try {
-        // ユーザーを登録
-        $stmt = $db->prepare("INSERT INTO users (user_id, username, otp_secret) VALUES (?, ?, ?)");
-        $stmt->execute([$user_id, $username, $otp_secret]);
-        
-        // OTP URIを生成（QRコード用）
-        $qr_uri = generate_otp_qr_url($user_id, $otp_secret, "AuthSystem");
-        
-        // 登録成功メッセージとシークレットキー、QRコードを表示
-        $success = "アカウントが作成されました。以下はOTP生成用のシークレットキーです。これを安全な場所に保存してください。<br><br>";
-        $success .= "<strong>" . $otp_secret . "</strong><br><br>";
-        $success .= "このキーを使って、OTP認証アプリ（例：Google Authenticator）を設定してください。<br><br>";
-        $success .= "<p><strong>または、以下のQRコードをスキャンして設定することもできます：</strong></p>";
-        $success .= "<p><img src='https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" . urlencode($qr_uri) . "' alt='QR Code'></p>";
-        $success .= "<p>このQRコードをOTP認証アプリ（例：Google Authenticator）でスキャンしてください。</p>";
-        
-    } catch(PDOException $e) {
-        if ($e->getCode() == 23000) { // 重複エラー
-            $error = "ユーザーIDが既に使用されています";
-        } else {
-            $error = "アカウント作成に失敗しました: " . $e->getMessage();
+    if (empty($id) || empty($username)) {
+        $error = "IDとユーザー名を入力してください";
+    } else {
+        try {
+            // DB接続
+            $db = new PDO('sqlite:db-folder/auth.db');
+            $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            
+            // ユーザーが既に存在するか確認
+            $stmt = $db->prepare("SELECT id FROM users WHERE user_id = ?");
+            $stmt->execute([$id]);
+            if ($stmt->fetch()) {
+                $error = "そのIDはすでに使用されています";
+            } else {
+                // 新しいシークレットキーを生成 (Base32)
+                $secret_key = generateSecretKey();
+                
+                // ユーザーを登録
+                $stmt = $db->prepare("INSERT INTO users (user_id, username, otp_secret) VALUES (?, ?, ?)");
+                $stmt->execute([$id, $username, $secret_key]);
+                
+                $success = "アカウントが作成されました。";
+            }
+        } catch (PDOException $e) {
+            $error = "アカウント作成エラー: " . $e->getMessage();
         }
     }
 }
 
-// Base32エンコード関数（PHP標準では提供されていない）
-function base32_encode($data) {
-    $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-    $bits = '';
+// シークレットキー生成関数
+function generateSecretKey() {
+    // Base32でエンコードされたランダムなシークレットキーを生成
+    $length = 10; // 10文字のBase32キー
+    $chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    $key = "";
     
-    // バイトデータをビットに変換
-    foreach (unpack('C*', $data) as $byte) {
-        $bits .= str_pad(decbin($byte), 8, '0', STR_PAD_LEFT);
+    for ($i = 0; $i < $length; $i++) {
+        $key .= $chars[rand(0, strlen($chars) - 1)];
     }
     
-    // 5ビットごとに分割してアルファベットに変換
-    $result = '';
-    for ($i = 0; $i < strlen($bits); $i += 5) {
-        if ($i + 5 <= strlen($bits)) {
-            $chunk = substr($bits, $i, 5);
-            $index = bindec($chunk);
-            if ($index < 32) {
-                $result .= $alphabet[$index];
-            }
-        }
-    }
-    
-    return $result;
+    return $key;
 }
 
 ?>
@@ -78,40 +66,108 @@ function base32_encode($data) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>アカウント作成</title>
+    <title>アカウント作成 - Server Controller</title>
     <style>
-        body { font-family: sans-serif; text-align: center; padding: 20px; background: #f4f4f9; color: #333; }
-        .container { max-width: 500px; margin: 50px auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
-        button { background: #0984e3; color: white; padding: 15px; border: none; border-radius: 8px; cursor: pointer; width: 100%; font-size: 16px; }
-        button:hover { background: #076bc2; }
-        .error { color: #d63031; margin: 10px 0; }
-        .success { color: #00b894; margin: 10px 0; background: #e6fffa; padding: 15px; border-radius: 8px; }
-        a { color: #0984e3; text-decoration: none; }
+        body { 
+            font-family: sans-serif; 
+            text-align: center; 
+            padding: 20px; 
+            background: #f4f4f9; 
+            color: #333; 
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 400px;
+            margin: 50px auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        h1 { color: #0984e3; margin-bottom: 30px; }
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #0984e3;
+            color: white;
+            border: none;
+            padding: 15px;
+            border-radius: 30px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #076cc2;
+        }
+        .error {
+            color: #d63031;
+            background: #ffeaa7;
+            padding: 10px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        .success {
+            color: #00b894;
+            background: #e6fffa;
+            padding: 10px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        .secret-key {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-family: monospace;
+            word-break: break-all;
+        }
+        .links {
+            margin-top: 20px;
+        }
+        .links a {
+            color: #0984e3;
+            text-decoration: none;
+            margin: 0 10px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2>アカウント作成</h2>
+        <h1>👤 アカウント作成</h1>
         
-        <?php if (isset($error)): ?>
-            <p class="error"><?php echo htmlspecialchars($error); ?></p>
+        <?php if ($error): ?>
+            <div class="error"><?php echo htmlspecialchars($error); ?></div>
         <?php endif; ?>
         
-        <?php if (isset($success)): ?>
-            <p class="success"><?php echo $success; ?></p>
+        <?php if ($success): ?>
+            <div class="success"><?php echo htmlspecialchars($success); ?></div>
+            <div class="secret-key">
+                あなたのシークレットキー:<br>
+                <strong><?php echo $secret_key ?? ''; ?></strong>
+            </div>
+            <p>このシークレットキーをOTP認証アプリに登録してください。</p>
+        <?php else: ?>
+            <form method="post">
+                <input type="text" name="id" placeholder="ユーザーID" required>
+                <input type="text" name="username" placeholder="ユーザー名" required>
+                <button type="submit">アカウント作成</button>
+            </form>
         <?php endif; ?>
         
-        <?php if (!isset($success)): ?>
-        <form method="post">
-            <input type="hidden" name="action" value="register">
-            <input type="text" name="user_id" placeholder="ユーザーID" required>
-            <input type="text" name="username" placeholder="ユーザー名" required>
-            <button type="submit">アカウント作成</button>
-        </form>
-        <?php endif; ?>
-        
-        <p><a href="login.php">ログインする</a></p>
+        <div class="links">
+            <a href="./login.php">ログイン</a>
+        </div>
     </div>
 </body>
 </html>

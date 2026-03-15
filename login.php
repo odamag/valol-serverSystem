@@ -2,54 +2,104 @@
 // ログインページ
 session_start();
 
-// DB接続
-try {
-    $db = new PDO('sqlite:db-folder/auth.db');
-    $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-} catch(PDOException $e) {
-    die("DB接続エラー: " . $e->getMessage());
+// 既にログインしている場合はマイページにリダイレクト
+if (isset($_SESSION['user_id'])) {
+    header("Location: ./start_server.php");
+    exit();
 }
 
+$error = "";
+
 // ログイン処理
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'login') {
-    $user_id = $_POST['user_id'];
-    $otp = $_POST['otp'];
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $id = $_POST['id'] ?? '';
+    $otp = $_POST['otp'] ?? '';
     
-    // ユーザーを検索
-    $stmt = $db->prepare("SELECT id, user_id, username, otp_secret FROM users WHERE user_id = ?");
-    $stmt->execute([$user_id]);
-    $user = $stmt->fetch(PDO::FETCH_ASSOC);
-    
-    if ($user) {
-        // OTP検証（HMAC-SHA1を使用）
-        if (verify_otp($user['otp_secret'], $otp)) {
-            // ログイン成功
-            $_SESSION['user_id'] = $user['id'];
-            $_SESSION['username'] = $user['username'];
-            header("Location: index.php");
-            exit();
-        } else {
-            $error = "無効なOTPです";
-        }
+    if (empty($id) || empty($otp)) {
+        $error = "IDとOTPを入力してください";
     } else {
-        $error = "ユーザーが見つかりません";
+        try {
+            // DB接続
+            $db = new PDO('sqlite:db-folder/auth.db');
+            $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            
+            // ユーザーを検索
+            $stmt = $db->prepare("SELECT id, username, otp_secret FROM users WHERE user_id = ?");
+            $stmt->execute([$id]);
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($user) {
+                // OTPの検証
+                $secret = $user['otp_secret'];
+                $valid = verifyTOTP($secret, $otp);
+                
+                if ($valid) {
+                    // ログイン成功
+                    $_SESSION['user_id'] = $user['id'];
+                    $_SESSION['username'] = $user['username'];
+                    header("Location: ./start_server.php");
+                    exit();
+                } else {
+                    $error = "OTPが正しくありません";
+                }
+            } else {
+                $error = "ユーザーが見つかりません";
+            }
+        } catch (PDOException $e) {
+            $error = "ログイン処理エラー: " . $e->getMessage();
+        }
     }
 }
 
-function verify_otp($secret, $otp) {
-    // TOTP (Time-based One-Time Password)を生成して比較
-    $timestamp = floor(time() / 30); // 30秒ごとに変化
+// TOTP検証関数
+function verifyTOTP($secret, $otp) {
+    // Base32デコード
+    $key = base32_decode($secret);
     
-    // HMAC-SHA1でOTPを計算
-    $hash = hash_hmac('sha1', pack('N*', 0) . $timestamp, $secret, true);
-    $offset = ord($hash[19]) & 0xf;
-    $truncated = (ord($hash[$offset]) & 0x7f) << 24 |
-                 (ord($hash[$offset + 1]) & 0xff) << 16 |
-                 (ord($hash[$offset + 2]) & 0xff) << 8 |
-                 (ord($hash[$offset + 3]) & 0xff);
+    // 現在時刻のタイムスタンプを取得（30秒ごとの周期）
+    $timestamp = floor(time() / 30);
     
-    $otp_value = $truncated % 1000000;
-    return $otp_value == $otp;
+    // シークレットと現在のタイムスタンプを使ってハッシュを生成
+    $hash = hash_hmac('sha1', pack('N*', 0) . pack('N*', $timestamp), $key, true);
+    
+    // ハッシュからオフセットを取得
+    $offset = ord($hash[19]) & 0x0F;
+    
+    // TOTPを生成
+    $otp_value = (
+        ((ord($hash[$offset]) & 0x7F) << 24) |
+        ((ord($hash[$offset + 1]) & 0xFF) << 16) |
+        ((ord($hash[$offset + 2]) & 0xFF) << 8) |
+        (ord($hash[$offset + 3]) & 0xFF)
+    ) % 1000000;
+    
+    // 6桁のOTPにフォーマット
+    $otp_value = sprintf('%06d', $otp_value);
+    
+    return hash_equals($otp_value, $otp);
+}
+
+// Base32デコード関数
+function base32_decode($input) {
+    $chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    $bits = "";
+    $output = "";
+    
+    for ($i = 0; $i < strlen($input); $i++) {
+        $pos = strpos($chars, strtoupper($input[$i]));
+        if ($pos !== false) {
+            $bits .= str_pad(decbin($pos), 5, '0', STR_PAD_LEFT);
+        }
+    }
+    
+    for ($i = 0; $i < strlen($bits); $i += 8) {
+        $byte = substr($bits, $i, 8);
+        if (strlen($byte) == 8) {
+            $output .= chr(bindec($byte));
+        }
+    }
+    
+    return $output;
 }
 
 ?>
@@ -59,32 +109,83 @@ function verify_otp($secret, $otp) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ログイン</title>
+    <title>ログイン - Server Controller</title>
     <style>
-        body { font-family: sans-serif; text-align: center; padding: 20px; background: #f4f4f9; color: #333; }
-        .container { max-width: 400px; margin: 50px auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
-        button { background: #0984e3; color: white; padding: 15px; border: none; border-radius: 8px; cursor: pointer; width: 100%; font-size: 16px; }
-        button:hover { background: #076bc2; }
-        .error { color: #d63031; margin: 10px 0; }
-        a { color: #0984e3; text-decoration: none; }
+        body { 
+            font-family: sans-serif; 
+            text-align: center; 
+            padding: 20px; 
+            background: #f4f4f9; 
+            color: #333; 
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 400px;
+            margin: 50px auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        h1 { color: #0984e3; margin-bottom: 30px; }
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #0984e3;
+            color: white;
+            border: none;
+            padding: 15px;
+            border-radius: 30px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #076cc2;
+        }
+        .error {
+            color: #d63031;
+            background: #ffeaa7;
+            padding: 10px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        .links {
+            margin-top: 20px;
+        }
+        .links a {
+            color: #0984e3;
+            text-decoration: none;
+            margin: 0 10px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2>ログイン</h2>
-        <?php if (isset($error)): ?>
-            <p class="error"><?php echo htmlspecialchars($error); ?></p>
+        <h1>🔐 ログイン</h1>
+        
+        <?php if ($error): ?>
+            <div class="error"><?php echo htmlspecialchars($error); ?></div>
         <?php endif; ?>
         
         <form method="post">
-            <input type="hidden" name="action" value="login">
-            <input type="text" name="user_id" placeholder="ユーザーID" required>
-            <input type="text" name="otp" placeholder="OTP" required>
+            <input type="text" name="id" placeholder="ユーザーID" required>
+            <input type="password" name="otp" placeholder="6桁のOTP" required>
             <button type="submit">ログイン</button>
         </form>
         
-        <p><a href="register.php">アカウントを作成する</a></p>
+        <div class="links">
+            <a href="./register.php">アカウント作成</a>
+        </div>
     </div>
 </body>
 </html>

@@ -310,4 +310,3 @@ foreach ($servers as $key => $conf) {
         <a href="https://www.notion.so/Minecraft-Server-2fcb31a2feb68015b9f5fc19b6cf793f?source=copy_link">ノーション</a>
     </div>
 </body>
-</html>

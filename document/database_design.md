@@ -1,43 +1,54 @@
 # データベース設計書
 
 ## 概要
-このシステムは、ユーザー認証機能を提供するためのSQLiteデータベースを設計しています。認証方式はOTP（ワンタイムパスワード）のみを使用し、OTP生成にはHMAC-SHA1アルゴリズムを採用します。
+このドキュメントは、ログイン機能を実装するために必要なデータベーステーブルの設計を記述します。
 
 ## テーブル設計
 
-### usersテーブル
-ユーザー情報を格納するテーブルです。
+### users テーブル
 
 | カラム名 | 型 | 必須 | 説明 |
 |----------|----|------|------|
 | id | INTEGER | YES | ユーザーの固有ID（自動採番） |
-| user_id | TEXT | YES | ログインに使用するユーザーID（ユニーク） |
-| username | TEXT | YES | ユーザー名 |
-| otp_secret | TEXT | YES | OTP生成用のシークレットキー（HMAC-SHA1） |
+| user_id | VARCHAR(50) | YES | ログイン用のユーザーID（重複不可） |
+| username | VARCHAR(100) | YES | ユーザーの表示名 |
+| otp_secret | VARCHAR(32) | YES | OTP認証用のシークレットキー |
 | created_at | DATETIME | YES | アカウント作成日時 |
 | updated_at | DATETIME | YES | 最終更新日時 |
 
-### sessionsテーブル
-ユーザーのセッション情報を格納するテーブルです。
+## テーブル作成SQL
 
-| カラム名 | 型 | 必須 | 説明 |
-|----------|----|------|------|
-| session_id | TEXT | YES | セッションID（UUID） |
-| user_id | INTEGER | YES | 関連するユーザーのID |
-| expires_at | DATETIME | YES | セッションの有効期限 |
-| created_at | DATETIME | YES | セッション作成日時 |
+```sql
+CREATE TABLE users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id VARCHAR(50) NOT NULL UNIQUE,
+    username VARCHAR(100) NOT NULL,
+    otp_secret VARCHAR(32) NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
 
-## OTP生成アルゴリズム
-- アルゴリズム：HMAC-SHA1
-- シークレットキー：usersテーブルのotp_secretカラムに保存
-- 有効期間：30秒（標準的なTOTP仕様）
-- データベースにはシークレットキーのみを保存し、OTPは生成時に計算
+## インデックス
 
-## セキュリティ対策
-1. データベースファイルは/db-folderフォルダーに配置され、.htaccessにより外部アクセスが禁止される
-2. シークレットキーは平文で保存（OTP生成のため）
-3. セッション情報は有効期限付きで管理
-4. SQLインジェクション対策としてプレースホルダを使用
+```sql
+-- ユーザーIDでの検索用インデックス
+CREATE INDEX idx_users_user_id ON users(user_id);
 
-## データベースファイルパス
-- データベースファイル：/db-folder/auth.db
+-- 作成日時での検索用インデックス
+CREATE INDEX idx_users_created_at ON users(created_at);
+```
+
+## 説明
+
+- `id`: ユニークなユーザー識別子として使用されます。
+- `user_id`: ログイン時に使用される識別子で、一意である必要があります。
+- `username`: ユーザーが設定する表示名です。
+- `otp_secret`: OTP認証に必要なシークレットキーです。Base32形式で保存されます。
+- `created_at` と `updated_at`: レコードの作成日時と更新日時を管理します。
+
+## 注意事項
+
+1. `user_id` は一意である必要があります（重複不可）
+2. `otp_secret` はセキュリティ上重要な情報なので、適切に管理する必要があります
+3. 日付関連のカラムは自動的に現在日時で更新されます
