@@ -1,0 +1,9 @@
+# .htaccess file to prevent direct access to database folder
+# This file blocks direct HTTP access to the db-folder directory
+
+# Deny all access to this directory
+Order deny,allow
+Deny from all
+
+# Alternative method for Apache 2.4+
+# Require all denied
