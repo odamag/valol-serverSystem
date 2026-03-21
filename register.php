@@ -10,6 +10,9 @@ if (isset($_SESSION['user_id'])) {
 
 $error = "";
 $success = "";
+$id = "";
+$username = "";
+$secret_key = "";
 
 // アカウント作成処理
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -48,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // シークレットキー生成関数
 function generateSecretKey() {
     // Base32でエンコードされたランダムなシークレットキーを生成
-    $length = 10; // 10文字のBase32キー
+    $length = 16; // 16文字のBase32キー (より安全)
     $chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
     $key = "";
     
@@ -57,6 +60,25 @@ function generateSecretKey() {
     }
     
     return $key;
+}
+
+// QRコード生成関数
+function generateQRCode($user_id, $secret_key) {
+    // qrcode_lib/qrlib.phpからOTP URIを取得
+    require_once 'qrcode_lib/qrlib.php';
+    if (class_exists('QRCode')) {
+        $qr = new QRCode();
+        return $qr->getOTPURI($user_id, $secret_key, "ServerController");
+    } else {
+        // フォールバック：直接URIを生成
+        $uri = "otpauth://totp/ServerController:" . urlencode($user_id);
+        $uri .= "?secret=" . urlencode($secret_key);
+        $uri .= "&issuer=ServerController";
+        $uri .= "&algorithm=SHA1";
+        $uri .= "&digits=6";
+        $uri .= "&period=30";
+        return $uri;
+    }
 }
 
 ?>
@@ -132,6 +154,13 @@ function generateSecretKey() {
             font-family: monospace;
             word-break: break-all;
         }
+        .qr-code {
+            margin: 20px 0;
+        }
+        .qr-code img {
+            max-width: 200px;
+            height: auto;
+        }
         .links {
             margin-top: 20px;
         }
@@ -155,6 +184,17 @@ function generateSecretKey() {
             <div class="secret-key">
                 あなたのシークレットキー:<br>
                 <strong><?php echo $secret_key ?? ''; ?></strong>
+            </div>
+            <div class="qr-code">
+                <p>QRコードをGoogle Authenticatorにスキャンしてください:</p>
+                <?php
+                // 使用するQRコードライブラリのOTP URIを生成
+                $otp_uri = generateQRCode($id, $secret_key);
+                // 既存のQRコード表示方式を使用
+                echo "<p><img src='https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" . urlencode($otp_uri) . "' alt='QR Code'></p>";
+                echo "<p>または、以下のURIをOTPアプリに登録してください:</p>";
+                echo "<p style='font-family: monospace; word-break: break-all;'>" . htmlspecialchars($otp_uri) . "</p>";
+                ?>
             </div>
             <p>このシークレットキーをOTP認証アプリに登録してください。</p>
         <?php else: ?>
