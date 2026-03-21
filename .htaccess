@@ -1,0 +1,30 @@
+# ── Basic認証 ──────────────────────────────────
+AuthUserFile /home/users/0/jellybean.jp-valol/web/.htpasswd
+AuthGroupFile /dev/null
+AuthName "アカウント名、パスワードを入力してください。"
+AuthType Basic
+require valid-user
+
+# ── 機密ファイルへの直接アクセスを拒否 ────────
+<Files "config.php">
+    deny from all
+</Files>
+
+# ── SPAルーティング ────────────────────────────
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # API・ゲームファイルはそのままPHPへ
+    RewriteRule ^api/   - [L]
+    RewriteRule ^games/ - [L]
+
+    # ビルド済み静的アセットを dist/ から配信
+    RewriteCond %{DOCUMENT_ROOT}/dist%{REQUEST_URI} -f
+    RewriteRule ^(.*)$ dist/$1 [L]
+
+    # SPA: 上記に該当しないルートはすべて dist/index.html へ
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ dist/index.html [L]
+</IfModule>

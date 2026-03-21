@@ -1,4 +1,18 @@
+# 機密設定
 config.php
-setup_palworld.bash
-setup.bash
+
+# AWS SDK（大容量バイナリ）
 aws.phar
+lib/aws.phar
+
+# ビルド成果物
+dist/
+frontend/node_modules/
+
+# ロックファイル
+starting_*.lock
+
+# OS・エディタ
+.DS_Store
+Thumbs.db
+*.swp
