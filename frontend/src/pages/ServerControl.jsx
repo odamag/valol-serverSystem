@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
 const STATUS_LABELS = {
   ready:   { label: '✨ オンライン',      cls: 'ready' },
@@ -79,12 +79,30 @@ export default function ServerControl() {
   const [servers, setServers] = useState(null)
   const [message, setMessage] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
+  const prevServersRef = useRef({})
+
+  function fireNotification(server) {
+    if (Notification.permission !== 'granted') return
+    new Notification(`${server.name} が起動しました！`, {
+      body: `接続先: ${server.ip}:${server.port}`,
+      icon: '/favicon.ico',
+    })
+  }
 
   const fetchStatus = useCallback(async () => {
     try {
       const res = await fetch('/api/server/status.php', { credentials: 'include' })
       const data = await res.json()
-      if (data.servers) setServers(data.servers)
+      if (data.servers) {
+        const prev = prevServersRef.current
+        for (const [key, server] of Object.entries(data.servers)) {
+          if (server.displayState === 'ready' && prev[key]?.displayState !== 'ready') {
+            fireNotification(server)
+          }
+        }
+        prevServersRef.current = data.servers
+        setServers(data.servers)
+      }
       if (data.message) setMessage(data.message)
     } catch {
       /* silent */
@@ -98,6 +116,9 @@ export default function ServerControl() {
   }, [fetchStatus])
 
   async function handleAction(action, target, instanceId) {
+    if (action === 'start' && Notification.permission === 'default') {
+      await Notification.requestPermission()
+    }
     setActionLoading(true)
     setMessage('')
     try {
@@ -121,7 +142,7 @@ export default function ServerControl() {
     <>
       <div className="page-header">
         <h1 className="page-title">⚡ サーバー起動</h1>
-        <p className="page-subtitle">Minecraft・Palworld の AWS サーバーを管理します</p>
+        <p className="page-subtitle">Minecraft・Palworld・7 Days to Die の AWS サーバーを管理します</p>
       </div>
 
       {message && <div className="message-banner">{message}</div>}

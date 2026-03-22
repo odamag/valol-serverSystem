@@ -27,6 +27,11 @@ $servers = [
         'lt_id' => $creds['PALLWORLD_LT_ID'],
         'tag'   => 'palworld',
     ],
+    '7days' => [
+        'name'  => '🧟 7 Days to Die',
+        'lt_id' => $creds['SEVENDAYS_LT_ID'],
+        'tag'   => '7days',
+    ],
 ];
 
 $data       = json_decode(file_get_contents('php://input'), true);

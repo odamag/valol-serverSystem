@@ -23,6 +23,11 @@ $servers = [
         'tag'  => 'palworld',
         'port' => 8211,
     ],
+    '7days' => [
+        'name' => '🧟 7 Days to Die',
+        'tag'  => '7days',
+        'port' => 26900,
+    ],
 ];
 
 try {
