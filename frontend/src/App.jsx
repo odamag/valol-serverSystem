@@ -7,6 +7,7 @@ import ServerControl from './pages/ServerControl.jsx'
 import MiniGames from './pages/MiniGames.jsx'
 import Profile from './pages/Profile.jsx'
 import Info from './pages/Info.jsx'
+import LoLInfo from './pages/LoLInfo.jsx'
 
 export const AuthContext = createContext(null)
 
@@ -44,6 +45,7 @@ function App() {
             <Route path="server" element={<ServerControl />} />
             <Route path="games" element={<MiniGames />} />
             <Route path="info" element={<Info />} />
+            <Route path="lol" element={<LoLInfo />} />
             <Route
               path="profile"
               element={auth.loggedIn ? <Profile /> : <Navigate to="/login" replace />}

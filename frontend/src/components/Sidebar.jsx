@@ -5,18 +5,20 @@ const navItems = [
   { to: '/server', label: 'サーバー起動', icon: '⚡' },
   { to: '/games',  label: 'ミニゲーム',   icon: '🎮' },
   { to: '/info',   label: '情報',          icon: '📋' },
+  { to: '/lol',    label: 'LoL情報',       icon: '⚔️' },
 ]
 
-export default function Sidebar() {
+export default function Sidebar({ isOpen, onClose }) {
   const { auth, setAuth } = useAuth()
 
   async function handleLogout() {
     await fetch('/api/auth/logout.php', { method: 'POST', credentials: 'include' })
     setAuth({ loading: false, loggedIn: false, username: null, userId: null })
+    onClose?.()
   }
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${isOpen ? ' sidebar--open' : ''}`}>
       <div className="sidebar-brand">
         <span className="brand-icon">🖥️</span>
         <span>Server System</span>
@@ -29,6 +31,7 @@ export default function Sidebar() {
             key={item.to}
             to={item.to}
             className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+            onClick={onClose}
           >
             <span className="nav-icon">{item.icon}</span>
             <span>{item.label}</span>
@@ -42,6 +45,7 @@ export default function Sidebar() {
             <NavLink
               to="/profile"
               className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+              onClick={onClose}
             >
               <span className="nav-icon">👤</span>
               <span>{auth.username}</span>
