@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(config.php)",
+      "Read(setup_palworld.bash)",
+      "Read(setup.bash)",
+      "Bash(aws.phar)"
+    ]
+  }
+}
