@@ -28,8 +28,9 @@ try {
         jsonResponse(['success' => false, 'message' => 'OTPが正しくありません']);
     }
 
-    $_SESSION['user_id']  = $user['id'];
-    $_SESSION['username'] = $user['username'];
+    $_SESSION['user_id']     = $user['id'];
+    $_SESSION['username']    = $user['username'];
+    $_SESSION['last_active'] = time();
 
     jsonResponse(['success' => true, 'username' => $user['username'], 'userId' => $user['id']]);
 } catch (PDOException $e) {

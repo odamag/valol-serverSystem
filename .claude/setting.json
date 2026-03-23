@@ -4,6 +4,8 @@
       "Read(config.php)",
       "Read(setup_palworld.bash)",
       "Read(setup.bash)",
+      "Read(generate_hash.php)",
+      "Read(site_config.php)",
       "Bash(aws.phar)"
     ]
   }

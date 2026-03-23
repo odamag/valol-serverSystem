@@ -1,5 +1,7 @@
 # 機密設定
 config.php
+generate_hash.php
+site_config.php
 
 # AWS SDK（大容量バイナリ）
 aws.phar

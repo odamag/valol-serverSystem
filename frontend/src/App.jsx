@@ -1,6 +1,7 @@
 import { useState, useEffect, createContext, useContext } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/Layout.jsx'
+import SiteGate from './components/SiteGate.jsx'
 import Login from './pages/Login.jsx'
 import Register from './pages/Register.jsx'
 import ServerControl from './pages/ServerControl.jsx'
@@ -36,27 +37,29 @@ function App() {
   }
 
   return (
-    <AuthContext.Provider value={{ auth, setAuth }}>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Navigate to="/server" replace />} />
-            <Route path="server" element={<ServerControl />} />
-            <Route path="games" element={<MiniGames />} />
-            <Route path="info" element={<Info />} />
-            <Route path="lol" element={<LoLInfo />} />
-            <Route path="lol-streak" element={<LoLStreak />} />
-            <Route
-              path="profile"
-              element={auth.loggedIn ? <Profile /> : <Navigate to="/login" replace />}
-            />
-          </Route>
-          <Route path="*" element={<Navigate to="/server" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </AuthContext.Provider>
+    <SiteGate>
+      <AuthContext.Provider value={{ auth, setAuth }}>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/" element={<Layout />}>
+              <Route index element={<Navigate to="/server" replace />} />
+              <Route path="server" element={<ServerControl />} />
+              <Route path="games" element={<MiniGames />} />
+              <Route path="info" element={<Info />} />
+              <Route path="lol" element={<LoLInfo />} />
+              <Route path="lol-streak" element={<LoLStreak />} />
+              <Route
+                path="profile"
+                element={auth.loggedIn ? <Profile /> : <Navigate to="/login" replace />}
+              />
+            </Route>
+            <Route path="*" element={<Navigate to="/server" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthContext.Provider>
+    </SiteGate>
   )
 }
 

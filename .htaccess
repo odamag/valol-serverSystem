@@ -1,12 +1,8 @@
-# ── Basic認証 ──────────────────────────────────
-AuthUserFile /home/users/0/jellybean.jp-valol/web/.htpasswd
-AuthGroupFile /dev/null
-AuthName "アカウント名、パスワードを入力してください。"
-AuthType Basic
-require valid-user
-
 # ── 機密ファイルへの直接アクセスを拒否 ────────
 <Files "config.php">
+    deny from all
+</Files>
+<Files "site_config.php">
     deny from all
 </Files>
 
