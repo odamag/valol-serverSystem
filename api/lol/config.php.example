@@ -1,0 +1,18 @@
+<?php
+// Riot API 設定ファイル
+// このファイルをコピーして config.php にリネームし、各値を埋めてください。
+// config.php は .gitignore で除外されています。
+
+return [
+    // Riot Developer Portal で取得した Personal API Key
+    // https://developer.riotgames.com/
+    'api_key' => 'RGAPI-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+
+    // 戦績を表示するメンバーのRiot ID一覧
+    // name: ゲーム内の名前（タグより前の部分）
+    // tag:  タグライン（# より後の部分、日本サーバーは通常 JP1）
+    'members' => [
+        ['name' => 'SummonerName1', 'tag' => 'JP1'],
+        ['name' => 'SummonerName2', 'tag' => 'JP1'],
+    ],
+];

@@ -8,6 +8,7 @@ import MiniGames from './pages/MiniGames.jsx'
 import Profile from './pages/Profile.jsx'
 import Info from './pages/Info.jsx'
 import LoLInfo from './pages/LoLInfo.jsx'
+import LoLStreak from './pages/LoLStreak.jsx'
 
 export const AuthContext = createContext(null)
 
@@ -46,6 +47,7 @@ function App() {
             <Route path="games" element={<MiniGames />} />
             <Route path="info" element={<Info />} />
             <Route path="lol" element={<LoLInfo />} />
+            <Route path="lol-streak" element={<LoLStreak />} />
             <Route
               path="profile"
               element={auth.loggedIn ? <Profile /> : <Navigate to="/login" replace />}
