@@ -10,6 +10,8 @@ import Profile from './pages/Profile.jsx'
 import Info from './pages/Info.jsx'
 import LoLInfo from './pages/LoLInfo.jsx'
 import LoLStreak from './pages/LoLStreak.jsx'
+import LoLPredict from './pages/LoLPredict.jsx'
+import ValorantPredict from './pages/ValorantPredict.jsx'
 
 export const AuthContext = createContext(null)
 
@@ -50,6 +52,8 @@ function App() {
               <Route path="info" element={<Info />} />
               <Route path="lol" element={<LoLInfo />} />
               <Route path="lol-streak" element={<LoLStreak />} />
+              <Route path="lol-predict" element={<LoLPredict />} />
+              <Route path="val-predict" element={<ValorantPredict />} />
               <Route
                 path="profile"
                 element={auth.loggedIn ? <Profile /> : <Navigate to="/login" replace />}

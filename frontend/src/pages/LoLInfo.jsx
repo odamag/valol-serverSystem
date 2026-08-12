@@ -68,6 +68,10 @@ export default function LoLInfo() {
   const [selected, setSelected] = useState(null)
   const [detail, setDetail] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [botInput, setBotInput] = useState('')
+  const [botLoading, setBotLoading] = useState(false)
+  const [botReply, setBotReply] = useState(null)
+  const [botError, setBotError] = useState(null)
 
   useEffect(() => {
     async function load() {
@@ -110,6 +114,46 @@ export default function LoLInfo() {
   function closeDetail() {
     setSelected(null)
     setDetail(null)
+    setBotInput('')
+    setBotReply(null)
+    setBotError(null)
+  }
+
+  async function sendBotMessage(messageOverride) {
+    const message = messageOverride ?? botInput.trim()
+    if (!message || !detail) return
+    setBotLoading(true)
+    setBotReply(null)
+    setBotError(null)
+    if (!messageOverride) setBotInput('')
+
+    const cleanDetail = {
+      ...detail,
+      spells: detail.spells.map(s => ({
+        name:        s.name,
+        description: s.description.replace(/<[^>]*>/g, '').trim(),
+      })),
+      passive: {
+        name:        detail.passive.name,
+        description: detail.passive.description.replace(/<[^>]*>/g, '').trim(),
+      },
+    }
+
+    try {
+      const res = await fetch('/api/lol/champion-bot.php', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'chat', champion_data: cleanDetail, message }),
+      })
+      const data = await res.json()
+      if (data.success) setBotReply(data.reply)
+      else setBotError(data.message ?? 'エラーが発生しました')
+    } catch {
+      setBotError('通信エラーが発生しました')
+    } finally {
+      setBotLoading(false)
+    }
   }
 
   const tagColor = {
@@ -335,6 +379,49 @@ export default function LoLInfo() {
                     </div>
                   ))}
                 </div>
+
+                <h3 className="lol-section-title" style={{ marginTop: 24 }}>AIに質問</h3>
+
+                <div className="lol-bot-quickbtns">
+                  {['カウンターは？', 'このチャンピオンの強みは？', 'どのレーンが最適？', 'コンボを教えて'].map(q => (
+                    <button key={q} className="lol-bot-quickbtn" onClick={() => sendBotMessage(q)} disabled={botLoading}>
+                      {q}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="lol-bot-inputrow">
+                  <input
+                    className="lol-bot-input"
+                    type="text"
+                    placeholder="チャンピオンについて質問..."
+                    value={botInput}
+                    onChange={e => setBotInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && sendBotMessage()}
+                    disabled={botLoading}
+                  />
+                  <button
+                    className="lol-bot-sendbtn"
+                    onClick={() => sendBotMessage()}
+                    disabled={botLoading || !botInput.trim()}
+                  >
+                    {botLoading ? '...' : '送信'}
+                  </button>
+                </div>
+
+                {botLoading && (
+                  <div className="lol-bot-loading">
+                    <div className="loading-spinner" style={{ width: 18, height: 18 }} />
+                    <span>AIが考えています...</span>
+                  </div>
+                )}
+                {botError && <div className="lol-bot-error">{botError}</div>}
+                {botReply && (
+                  <div className="lol-bot-reply">
+                    <span className="lol-bot-reply-label">AI</span>
+                    <p className="lol-bot-reply-text">{botReply}</p>
+                  </div>
+                )}
               </>
             )}
           </div>

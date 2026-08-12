@@ -1,0 +1,7 @@
+<?php
+// このファイルを api/ai_config.php にコピーしてAPIキーを設定する
+// api/ai_config.php は .gitignore に追加すること
+
+return [
+    'ANTHROPIC_API_KEY' => 'sk-ant-api03-YOUR_KEY_HERE',
+];

@@ -1,18 +1,42 @@
 <?php
-// Riot API 設定ファイル
-// このファイルをコピーして config.php にリネームし、各値を埋めてください。
-// config.php は .gitignore で除外されています。
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// LoL API 設定ファイル サンプル
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//
+// 【初回設定手順】
+//   1. このファイルを config.php にコピーする
+//   2. 下記の各値を実際の値に書き換える
+//   3. config.php は .gitignore 対象 — APIキーをコミットしないこと
+//
+// 【Riot API キーの取得方法】
+//   1. https://developer.riotgames.com/ にログイン
+//   2. 「DEVELOPMENT API KEY」をコピー（24時間で失効・毎日再発行が必要）
+//   3. 本番利用する場合は「PRODUCTION KEY」を申請する
+//
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 return [
-    // Riot Developer Portal で取得した Personal API Key
-    // https://developer.riotgames.com/
+
+    // ── Riot API キー ───────────────────────────────────────────────────────
+    // 形式: RGAPI-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
     'api_key' => 'RGAPI-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
 
-    // 戦績を表示するメンバーのRiot ID一覧
-    // name: ゲーム内の名前（タグより前の部分）
-    // tag:  タグライン（# より後の部分、日本サーバーは通常 JP1）
+    // ── 戦績を表示するメンバー一覧 ──────────────────────────────────────────
+    // Riot ID = name # tag の形式で登録する
+    //
+    // name: # より前の部分（スペース含む場合もそのまま記述）
+    // tag:  # より後の部分
+    //       日本サーバーでは JP1 か任意のカスタムタグ（数字・英字4〜5文字）
+    //
+    // 例）
+    //   Riot ID が「プレイヤー#JP1」    → name: 'プレイヤー',  tag: 'JP1'
+    //   Riot ID が「SomeName#1234」     → name: 'SomeName',   tag: '1234'
+    //   Riot ID が「John Doe#ABCD」     → name: 'John Doe',   tag: 'ABCD'
+    //
     'members' => [
-        ['name' => 'SummonerName1', 'tag' => 'JP1'],
-        ['name' => 'SummonerName2', 'tag' => 'JP1'],
+        ['name' => 'Player1',   'tag' => 'JP1'],
+        ['name' => 'Player2',   'tag' => '1234'],
+        ['name' => 'Player3',   'tag' => 'ABCD'],
     ],
+
 ];

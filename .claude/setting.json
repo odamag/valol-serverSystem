@@ -6,6 +6,7 @@
       "Read(setup.bash)",
       "Read(generate_hash.php)",
       "Read(site_config.php)",
+      "Read(discord_config.php)",
       "Bash(aws.phar)"
     ]
   }

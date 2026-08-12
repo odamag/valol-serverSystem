@@ -326,6 +326,50 @@ body {
 .auth-link a { color: var(--accent); text-decoration: none; }
 .auth-link a:hover { text-decoration: underline; }
 
+/* Discordログインボタン */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0 14px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--card-border);
+}
+
+.btn-discord {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px;
+  background: #5865F2;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.12s, transform 0.1s;
+}
+.btn-discord:hover {
+  background: #4752C4;
+  transform: translateY(-1px);
+}
+.discord-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
 /* ── Loading screen ── */
 .loading-screen {
   display: flex;
@@ -899,6 +943,95 @@ body {
   margin-top: 4px;
 }
 
+/* ── LoL Champion Bot ── */
+.lol-bot-quickbtns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.lol-bot-quickbtn {
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--card-border);
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--accent);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.lol-bot-quickbtn:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.22);
+  border-color: var(--accent);
+}
+.lol-bot-quickbtn:disabled { opacity: 0.45; cursor: not-allowed; }
+.lol-bot-inputrow { display: flex; gap: 8px; margin-bottom: 10px; }
+.lol-bot-input {
+  flex: 1;
+  padding: 9px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--card-border);
+  background: var(--main-bg);
+  color: var(--text);
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.12s;
+}
+.lol-bot-input:focus { border-color: var(--accent); }
+.lol-bot-input::placeholder { color: #4a6080; }
+.lol-bot-sendbtn {
+  padding: 9px 18px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.12s;
+  white-space: nowrap;
+}
+.lol-bot-sendbtn:hover:not(:disabled) { opacity: 0.85; }
+.lol-bot-sendbtn:disabled { opacity: 0.45; cursor: not-allowed; }
+.lol-bot-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-bottom: 10px;
+}
+.lol-bot-error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #f87171;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  margin-bottom: 10px;
+}
+.lol-bot-reply {
+  background: var(--main-bg);
+  border-radius: 8px;
+  padding: 14px;
+  margin-top: 4px;
+}
+.lol-bot-reply-label {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: rgba(59, 130, 246, 0.2);
+  color: var(--accent);
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-bottom: 8px;
+}
+.lol-bot-reply-text {
+  font-size: 0.875rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
 @media (max-width: 768px) {
   .lol-grid {
     grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
@@ -1278,4 +1411,487 @@ body {
   word-break: break-all;
   margin: 8px 0;
   text-align: left;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   LoL 予測ゲーム
+═══════════════════════════════════════════════════════════════ */
+.predict-page {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+.predict-header {
+  margin-bottom: 20px;
+}
+.predict-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.predict-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* タブ */
+.predict-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--card-border);
+  padding-bottom: 4px;
+}
+.predict-tab {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  padding: 6px 14px;
+  cursor: pointer;
+  border-radius: 6px 6px 0 0;
+  transition: color 0.15s, background 0.15s;
+}
+.predict-tab.active {
+  color: var(--accent);
+  border-bottom: 2px solid var(--accent);
+  font-weight: 600;
+}
+.predict-tab:hover:not(.active) {
+  color: var(--text);
+  background: rgba(255,255,255,0.05);
+}
+
+/* リーグフィルター */
+.predict-league-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.predict-league-btn {
+  padding: 4px 12px;
+  border-radius: 99px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+}
+.predict-league-btn:hover { color: var(--text); border-color: #5a7aa0; }
+.predict-league-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(59,130,246,0.12);
+  font-weight: 600;
+}
+
+/* セクションタイトル */
+.predict-section-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 20px 0 10px;
+}
+
+/* 試合リスト */
+.predict-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* カード */
+.predict-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.predict-card--resolved {
+  opacity: 0.85;
+}
+
+.predict-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: rgba(0,0,0,0.2);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--card-border);
+}
+.predict-league {
+  font-weight: 600;
+  color: var(--accent);
+}
+.predict-time {
+  margin-left: auto;
+}
+.predict-resolved-badge {
+  background: var(--success);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 99px;
+}
+
+/* 対戦 */
+.predict-matchup {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 16px 14px;
+}
+.predict-side {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.predict-vs {
+  width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* 投票ボタン */
+.predict-team-btn {
+  width: 100%;
+  background: rgba(255,255,255,0.04);
+  border: 2px solid var(--card-border);
+  border-radius: 8px;
+  padding: 12px 8px;
+  cursor: pointer;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  color: var(--text);
+}
+.predict-team-btn:hover:not(:disabled) {
+  background: rgba(59,130,246,0.12);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.predict-team-btn:disabled {
+  cursor: default;
+}
+.predict-team-btn.voted {
+  border-color: var(--accent);
+  background: rgba(59,130,246,0.15);
+}
+.predict-team-btn.result-win {
+  border-color: var(--success);
+  background: rgba(16,185,129,0.12);
+}
+.predict-team-btn.result-loss {
+  border-color: var(--card-border);
+  opacity: 0.55;
+}
+
+.predict-team-code {
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.predict-team-name {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 110px;
+}
+.predict-mult {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.predict-mult-first {
+  font-size: 0.68rem;
+  color: #fbbf24;
+  font-weight: 600;
+}
+.predict-vote-count {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+/* 投票バー */
+.predict-bar-wrap {
+  display: flex;
+  height: 4px;
+  width: 100%;
+  overflow: hidden;
+}
+.predict-bar-fill {
+  height: 100%;
+  transition: width 0.4s ease;
+}
+.predict-bar-t1 { background: var(--accent); }
+.predict-bar-t2 { background: #f87171; }
+
+/* フッター */
+.predict-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 14px;
+  background: rgba(0,0,0,0.15);
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  border-top: 1px solid var(--card-border);
+}
+.predict-hint     { color: var(--text-muted); }
+.predict-my-vote  { color: var(--accent); font-weight: 600; }
+.predict-result-msg.correct { color: var(--success); font-weight: 700; }
+.predict-result-msg.wrong   { color: var(--danger);  font-weight: 600; }
+.predict-total-votes { margin-left: auto; }
+
+/* ローディング・空・エラー */
+.predict-loading {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 40px;
+}
+.predict-empty {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 40px;
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  border: 1px solid var(--card-border);
+}
+.predict-error {
+  text-align: center;
+  color: var(--danger);
+  padding: 32px;
+  background: rgba(239,68,68,0.08);
+  border-radius: var(--radius);
+  border: 1px solid rgba(239,68,68,0.3);
+}
+.predict-retry-btn {
+  margin-top: 12px;
+  padding: 6px 18px;
+  background: var(--danger);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+/* リーダーボード */
+.predict-leaderboard {
+  margin-top: 8px;
+}
+.predict-lb-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--card-border);
+}
+.predict-lb-table thead th {
+  background: rgba(0,0,0,0.25);
+  padding: 10px 14px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: left;
+  border-bottom: 1px solid var(--card-border);
+}
+.predict-lb-table tbody td {
+  padding: 10px 14px;
+  font-size: 0.88rem;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.predict-lb-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.predict-lb-table tbody tr.lb-top {
+  background: rgba(59,130,246,0.06);
+}
+.lb-rank  { font-size: 1rem; width: 56px; }
+.lb-name  { font-weight: 600; }
+.lb-points { font-weight: 700; color: #fbbf24; text-align: right; }
+.lb-acc   { text-align: right; color: var(--text-muted); }
+.lb-acc-pct { font-size: 0.75rem; }
+
+/* モバイル */
+@media (max-width: 480px) {
+  .predict-team-name { max-width: 70px; }
+  .predict-team-code { font-size: 0.95rem; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   VALORANT 予測ゲーム（predict-* の上書き + 独自スタイル）
+═══════════════════════════════════════════════════════════════ */
+
+/* アクセントカラーをVALORANTレッドに上書き */
+.val-page .predict-tab.active,
+.val-page .val-tab-active        { color: #ff4655; border-bottom-color: #ff4655; }
+.val-page .predict-my-vote       { color: #ff4655; }
+.val-page .predict-team-btn.voted { border-color: #ff4655; background: rgba(255,70,85,0.12); }
+.val-page .predict-league-btn.active {
+  border-color: #ff4655; color: #ff4655; background: rgba(255,70,85,0.1);
+}
+
+/* カードアクセント */
+.val-card { border-top: 2px solid rgba(255,70,85,0.4); }
+
+/* 投票バー */
+.val-bar-t1 { background: #ff4655; }
+.val-bar-t2 { background: #3b82f6; }
+
+/* ヘッダー */
+.val-header .predict-title { color: #ff4655; }
+.val-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+/* トーナメント・ラウンド */
+.val-tournament {
+  font-weight: 600;
+  color: #ff4655;
+  font-size: 0.8rem;
+}
+.val-round {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.val-manual-badge {
+  background: rgba(251,191,36,0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(251,191,36,0.3);
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 99px;
+}
+
+/* リーダーボードポイント色 */
+.val-lb-points { color: #ff4655; }
+
+/* 管理トグルボタン */
+.val-admin-toggle {
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s;
+}
+.val-admin-toggle:hover,
+.val-admin-toggle.active {
+  border-color: #fbbf24;
+  color: #fbbf24;
+}
+
+/* 管理パネル */
+.val-admin-panel {
+  background: rgba(251,191,36,0.04);
+  border: 1px solid rgba(251,191,36,0.2);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 20px;
+}
+.val-admin-note {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 12px;
+  line-height: 1.6;
+}
+
+/* 試合登録フォーム */
+.val-add-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #fbbf24;
+  margin-bottom: 12px;
+}
+.val-add-msg {
+  font-size: 0.82rem;
+  padding: 7px 10px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+}
+.val-add-msg.ok  { background: rgba(16,185,129,0.1); color: #34d399; }
+.val-add-msg.err { background: rgba(239,68,68,0.1);  color: #f87171; }
+
+.val-add-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  align-items: center;
+}
+.val-add-input { flex: 1; padding: 8px 10px; font-size: 0.85rem; }
+.val-add-vs {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.val-add-submit {
+  padding: 8px 18px;
+  background: #ff4655;
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s;
+}
+.val-add-submit:hover:not(:disabled) { background: #e03040; }
+.val-add-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* 結果確定ボタン */
+.val-resolve-btns {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  width: 100%;
+  border-top: 1px solid var(--card-border);
+  padding-top: 8px;
+}
+.val-resolve-btn {
+  flex: 1;
+  padding: 5px 8px;
+  background: rgba(255,70,85,0.1);
+  border: 1px solid rgba(255,70,85,0.3);
+  color: #ff4655;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.val-resolve-btn:hover { background: rgba(255,70,85,0.2); }
+
+@media (max-width: 480px) {
+  .val-add-row { flex-wrap: wrap; }
+  .val-add-input { min-width: 0; }
 }

@@ -6,7 +6,9 @@ const navItems = [
   { to: '/games',  label: 'ミニゲーム',   icon: '🎮' },
   { to: '/info',   label: '情報',          icon: '📋' },
   { to: '/lol',        label: 'LoL情報',   icon: '⚔️' },
-  { to: '/lol-streak', label: 'LoL戦績',  icon: '🏆' },
+  { to: '/lol-streak',   label: 'LoL戦績',   icon: '🏆' },
+  { to: '/lol-predict',  label: 'LoL予測',   icon: '🎯' },
+  { to: '/val-predict',  label: 'VAL予測',   icon: '🔫' },
 ]
 
 export default function Sidebar({ isOpen, onClose }) {

@@ -5,6 +5,9 @@
 <Files "site_config.php">
     deny from all
 </Files>
+<Files "discord_config.php">
+    deny from all
+</Files>
 
 # ── SPAルーティング ────────────────────────────
 <IfModule mod_rewrite.c>
