@@ -20,6 +20,13 @@ const games = [
     description: '障害物を避けながらラインを通過するアクションゲーム。',
     tag: '2プレイヤー',
   },
+  {
+    href: '/games/gungi/',
+    icon: '🀄',
+    title: '軍儀 (Gungi)',
+    description: 'HUNTER×HUNTER風の駒を積み重ねる対戦ボードゲーム。P2Pでリアルタイム対戦。',
+    tag: '2プレイヤー',
+  },
 ]
 
 export default function MiniGames() {

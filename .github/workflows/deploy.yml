@@ -1,0 +1,66 @@
+name: Deploy to FTPS
+
+# main へのマージ(push)をトリガーに、フロントエンドをビルドしてFTPS(暗号化FTP)でアップロードする。
+# 手動実行(workflow_dispatch)にも対応。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+        # vite.config.js の outDir 設定により、成果物はリポジトリ直下の dist/ に出力される
+
+      - name: Deploy via FTPS
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          server-dir: ${{ vars.FTP_SERVER_DIR || './' }}
+          # 明示的FTPS(FTPES、ポート21から暗号化にアップグレード)。
+          # ホスティング側が「暗黙的FTPS(実装FTPS/ポート990)」しか提供していない場合は
+          # protocol: ftps-legacy に変更してください。
+          protocol: ftps
+          dangerous-clean-slate: false
+          # 下記はビルド成果物に含まれない/含めたくないパスに加え、
+          # サーバー側にのみ存在する機密設定・実行時データ(auth.dbなど)を
+          # 自動デプロイで絶対に上書き・削除しないための除外リスト。
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/.github/**
+            **/frontend/**
+            **/node_modules/**
+            **/.DS_Store
+            **/config.php
+            **/config.php.example
+            **/site_config.php
+            **/discord_config.php
+            **/api/ai_config.php
+            **/api/ai_config.php.example
+            **/api/lol/config.php
+            **/api/lol/config.php.example
+            **/generate_hash.php
+            **/aws.phar
+            **/lib/aws.phar
+            **/db-folder/**
