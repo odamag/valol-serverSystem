@@ -2,8 +2,13 @@ name: Deploy to FTP
 
 # main へのマージ(push)をトリガーに、フロントエンドをビルドしてFTPでアップロードする。
 # 手動実行(workflow_dispatch)にも対応。
-# 注: ロリポップ(エコノミープラン)のFTPSがGitHub Actionsランナーからのデータ接続で
-# ECONNRESETになる問題を確認したため、暗号化なしのFTPを使用している。
+#
+# 注: ロリポップ(エコノミープラン)相手にSamKirkland/FTP-Deploy-Action(Node製の
+# basic-ftpライブラリ)で接続すると、ログインは通るがデータ接続(PASV)で
+# ECONNRESETになり失敗することを確認(FTP/FTPSどちらでも同様に失敗)。
+# Cyberduck等の成熟したFTPクライアントでは正常に接続できていることから、
+# 「サーバーが返すPASV応答のIPをそのまま信じず、賢く補正する」挙動の有無が
+# 差だと考えられる。同様に枯れたCLIクライアントである lftp に切り替えている。
 on:
   push:
     branches: [main]
@@ -32,37 +37,44 @@ jobs:
         run: npm run build
         # vite.config.js の outDir 設定により、成果物はリポジトリ直下の dist/ に出力される
 
-      - name: Deploy via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          server-dir: ${{ vars.FTP_SERVER_DIR || './' }}
-          protocol: ftp
-          dangerous-clean-slate: false
-          # 下記はビルド成果物に含まれない/含めたくないパスに加え、
-          # サーバー側にのみ存在する機密設定・実行時データ(auth.dbなど)を
-          # 自動デプロイで絶対に上書き・削除しないための除外リスト。
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/.github/**
-            **/.claude/**
-            **/frontend/**
-            **/node_modules/**
-            **/.DS_Store
-            **/.clineignore
-            **/document/**
-            **/config.php
-            **/config.php.example
-            **/site_config.php
-            **/discord_config.php
-            **/api/ai_config.php
-            **/api/ai_config.php.example
-            **/api/lol/config.php
-            **/api/lol/config.php.example
-            **/generate_hash.php
-            **/aws.phar
-            **/lib/aws.phar
-            **/db-folder/**
+      - name: Install lftp
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp
+
+      - name: Deploy via FTP (lftp)
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_SERVER_DIR: ${{ vars.FTP_SERVER_DIR || './' }}
+        run: |
+          lftp <<LFTP_EOF
+          set ftp:passive-mode true
+          set net:max-retries 2
+          set net:timeout 20
+          open -u "$FTP_USERNAME","$FTP_PASSWORD" "$FTP_SERVER"
+          mirror --reverse --verbose --parallel=3 \
+            --exclude-glob '.git*' \
+            --exclude-glob '.github/' \
+            --exclude-glob '.claude/' \
+            --exclude-glob 'frontend/' \
+            --exclude-glob 'node_modules/' \
+            --exclude-glob 'document/' \
+            --exclude-glob 'db-folder/' \
+            --exclude-glob '.DS_Store' \
+            --exclude-glob '.clineignore' \
+            --exclude-glob 'config.php' \
+            --exclude-glob 'config.php.example' \
+            --exclude-glob 'site_config.php' \
+            --exclude-glob 'discord_config.php' \
+            --exclude-glob 'generate_hash.php' \
+            --exclude-glob 'aws.phar' \
+            --exclude-glob 'api/ai_config.php' \
+            --exclude-glob 'api/ai_config.php.example' \
+            --exclude-glob 'api/lol/config.php' \
+            --exclude-glob 'api/lol/config.php.example' \
+            --exclude-glob 'lib/aws.phar' \
+            ./ "$FTP_SERVER_DIR"
+          bye
+          LFTP_EOF
+        # mirror --reverse はデフォルトで「差分アップロードのみ」、--delete を付けない限り
+        # サーバー側にしかないファイル(config.php・auth.dbなど)を削除しないので安全。
