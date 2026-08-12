@@ -1,7 +1,9 @@
-name: Deploy to FTPS
+name: Deploy to FTP
 
-# main へのマージ(push)をトリガーに、フロントエンドをビルドしてFTPS(暗号化FTP)でアップロードする。
+# main へのマージ(push)をトリガーに、フロントエンドをビルドしてFTPでアップロードする。
 # 手動実行(workflow_dispatch)にも対応。
+# 注: ロリポップ(エコノミープラン)のFTPSがGitHub Actionsランナーからのデータ接続で
+# ECONNRESETになる問題を確認したため、暗号化なしのFTPを使用している。
 on:
   push:
     branches: [main]
@@ -30,17 +32,14 @@ jobs:
         run: npm run build
         # vite.config.js の outDir 設定により、成果物はリポジトリ直下の dist/ に出力される
 
-      - name: Deploy via FTPS
+      - name: Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           server-dir: ${{ vars.FTP_SERVER_DIR || './' }}
-          # 明示的FTPS(FTPES、ポート21から暗号化にアップグレード)。
-          # ホスティング側が「暗黙的FTPS(実装FTPS/ポート990)」しか提供していない場合は
-          # protocol: ftps-legacy に変更してください。
-          protocol: ftps
+          protocol: ftp
           dangerous-clean-slate: false
           # 下記はビルド成果物に含まれない/含めたくないパスに加え、
           # サーバー側にのみ存在する機密設定・実行時データ(auth.dbなど)を
@@ -49,9 +48,12 @@ jobs:
             **/.git*
             **/.git*/**
             **/.github/**
+            **/.claude/**
             **/frontend/**
             **/node_modules/**
             **/.DS_Store
+            **/.clineignore
+            **/document/**
             **/config.php
             **/config.php.example
             **/site_config.php
