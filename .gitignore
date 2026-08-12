@@ -9,6 +9,9 @@ api/ai_config.php
 aws.phar
 lib/aws.phar
 
+# 実行時データ(本番の実データを誤ってコミット/上書きしないため)
+db-folder/*.db
+
 # ビルド成果物
 dist/
 frontend/node_modules/
