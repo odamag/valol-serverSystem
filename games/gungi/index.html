@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>軍儀 (Gungi) - P2P対戦</title>
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============ 接続画面 ============ -->
+<div id="setup-screen" class="screen active">
+  <h1>軍儀 <span style="color:var(--text-dim); font-size:14px;">(HUNTER×HUNTER風 P2P対戦)</span></h1>
+  <p class="subtitle">合言葉を入力して、友達と接続しよう。同じ合言葉を入力した2人が自動的にホスト/ゲストとしてマッチングします。</p>
+  <input type="text" id="room-name" placeholder="例: secret123" maxlength="20"><br>
+  <button id="join-btn" class="primary">接続する</button>
+  <div id="status-line">待機中...</div>
+  <p class="note" style="margin-top:18px;">
+    <button id="help-btn-setup">📖 ルールを見る</button>
+  </p>
+</div>
+
+<!-- ============ モード選択画面 ============ -->
+<div id="mode-screen" class="screen">
+  <h1>対局モードを選ぶ</h1>
+  <p class="subtitle">接続完了！ <span id="my-role-label"></span></p>
+  <div id="mode-host-picker" class="mode-options">
+    <div class="mode-card">
+      <h3>🀄 自由配置(本格ルール)</h3>
+      <p>先手・後手が交互に自分の持ち駒を自陣(3段)へ配置してから対局を始めます。帥を最初に置く必要があります。全14種25枚の駒を使用。</p>
+      <button id="start-manual-btn" class="primary">自由配置で開始</button>
+    </div>
+    <div class="mode-card">
+      <h3>⚡ お試しプレイ(固定配置)</h3>
+      <p>あらかじめ用意された標準フォーメーション(15駒)を両者に自動配置して、すぐ対局を始めます。残り10駒は持ち駒として残り、対局中に「新(アラタ)」で配置できます。初めての方はこちら。</p>
+      <button id="start-quick-btn">固定配置ですぐ開始</button>
+    </div>
+  </div>
+  <div id="mode-guest-waiting" style="display:none;">
+    <p class="subtitle">ホストがモードを選択しています...</p>
+  </div>
+</div>
+
+<!-- ============ ゲーム画面 ============ -->
+<div id="game-screen" class="screen">
+  <div class="top-bar">
+    <div>
+      <span class="turn-indicator" id="turn-indicator">-</span>
+      <span class="check-banner" id="check-banner">王手！</span>
+    </div>
+    <div class="action-buttons">
+      <button id="pass-placement-btn" style="display:none;">配置完了(済)</button>
+      <button id="autofill-btn" style="display:none;">残りをお任せ配置</button>
+      <button id="resign-btn" class="danger">投了</button>
+      <button id="help-btn-game">📖 ルール</button>
+    </div>
+  </div>
+
+  <div class="game-layout">
+    <!-- 左パネル: 相手情報 -->
+    <div class="side-panel">
+      <div class="panel-box">
+        <h4 id="opp-hand-title">相手の持ち駒</h4>
+        <div class="hand-tray" id="opp-hand-tray"></div>
+      </div>
+      <div class="panel-box">
+        <h4>相手が取った駒</h4>
+        <div class="grave-tray" id="opp-grave-tray"></div>
+      </div>
+      <div class="panel-box">
+        <h4>対局ログ</h4>
+        <div class="log-list" id="log-list"></div>
+      </div>
+    </div>
+
+    <!-- 中央: 盤面 -->
+    <div class="board-wrap">
+      <div class="col-labels" id="col-labels"></div>
+      <div class="board-row-wrap">
+        <div id="row-labels" style="display:flex; flex-direction:column; gap:2px;"></div>
+        <div id="board"></div>
+      </div>
+    </div>
+
+    <!-- 右パネル: 自分情報 -->
+    <div class="side-panel">
+      <div class="panel-box">
+        <h4 id="my-hand-title">自分の持ち駒(クリックして選択)</h4>
+        <div class="hand-tray" id="my-hand-tray"></div>
+      </div>
+      <div class="panel-box">
+        <h4>自分が取った駒</h4>
+        <div class="grave-tray" id="my-grave-tray"></div>
+      </div>
+      <div class="panel-box">
+        <h4>選択中マスの詳細(下段→上段)</h4>
+        <div id="stack-detail-list"><div id="stack-detail-empty">マスをクリックすると詳細が表示されます</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ ヘルプ/ルールモーダル ============ -->
+<div class="modal-overlay" id="help-modal">
+  <div class="modal-box">
+    <h2>軍儀 ルール(このゲームでの解釈)</h2>
+    <p class="note">
+      軍儀はHUNTER×HUNTER作中の架空のボードゲームで、原作では細則の全てが公開されているわけではありません。
+      このページのルールは、公式ボードゲーム版の駒の動き解説記事やファンによる考察(下記参照)を基に、
+      対戦として遊べるよう独自に補完・再構成した非公式ルールです。
+    </p>
+
+    <div class="rules-section">
+      <h4>盤面と基本</h4>
+      <ul>
+        <li>9×9マスの盤に、各マス最大3段まで駒を積み重ねられます(通称「ツケ」)。</li>
+        <li>各プレイヤーは14種類・計25枚の駒を持ちます。</li>
+        <li>スタックの中で動かせるのは常に最上段の駒だけです。</li>
+        <li>自分より高い段にある相手の駒は取れません(段の低い駒は高い段の駒に手が出せません)。</li>
+        <li>相手の「帥」を取る、または帥が身動き取れない状態(詰み)にすると勝利です。</li>
+        <li>同一局面が4回発生した場合は引き分けとして対局を終了します(本実装では指し直しの代わりに引き分け表示)。</li>
+      </ul>
+    </div>
+
+    <div class="rules-section">
+      <h4>手番でできる3つの行動</h4>
+      <ul>
+        <li><b>移動</b>: 自分の駒(スタック最上段)を、駒の移動ルールに従って動かします。移動先が空マスなら通常移動、自分の駒の上なら「ツケ」(1段積む)、相手の駒の上なら(段条件を満たせば)「捕獲」になります。</li>
+        <li><b>新(アラタ)</b>: 持ち駒を盤上の空マスへ新規に配置します(将棋の「打つ」と同じ)。</li>
+        <li><b>謀の寝返り</b>: 「謀」を持ち駒に残した状態で、盤上の敵駒(帥を除く)と同じ種類の駒も持ち駒にあれば、その2枚を消費して敵駒を自分の駒に寝返らせられます(このゲーム独自の解釈)。捕獲した駒は通常、持ち駒には戻らず完全に除外されます。</li>
+      </ul>
+    </div>
+
+    <div class="rules-section">
+      <h4>配置フェーズ</h4>
+      <ul>
+        <li>先手・後手が交互に、自陣(3段=9マス×3列)へ持ち駒を1枚ずつ配置します。</li>
+        <li>各プレイヤーが最初に置く駒は必ず「帥」です。</li>
+        <li>「配置完了(済)」を宣言すると、以後その駒は本戦フェーズ中に「新(アラタ)」で盤上へ出せます。</li>
+        <li>両者が完了を宣言すると本戦フェーズが始まり、先手から手番を開始します。</li>
+      </ul>
+    </div>
+
+    <div class="rules-section">
+      <h4>駒の動き方一覧(段数=ツケの高さで射程が変化)</h4>
+      <div class="piece-legend-grid" id="piece-legend"></div>
+      <p class="note">F=前方(敵陣方向) / B=後方 / L,R=左右 / FL,FR,BL,BR=斜め前後。射程は段が上がるごとに拡張されます(詳細は各駒アイコン参照)。弓・砲・筒は自分の段以下のスタックを飛び越えられます。</p>
+    </div>
+
+    <div class="rules-section">
+      <h4>参考にした情報源</h4>
+      <ul class="note">
+        <li>HUNTER×HUNTER 軍儀 Q&A (Universal Music)</li>
+        <li>note.com「軍儀・ルール解説」シリーズ(源川さとし氏)、その他ファンによる軍儀考察記事</li>
+        <li>YouTube「HUNTER×HUNTER 軍儀 4分で分かる遊び方」</li>
+      </ul>
+    </div>
+
+    <div class="modal-close-row"><button class="primary" id="help-close-btn">閉じる</button></div>
+  </div>
+</div>
+
+<!-- ============ ゲーム終了モーダル ============ -->
+<div class="modal-overlay" id="gameover-modal">
+  <div class="modal-box" style="max-width:380px; text-align:center;">
+    <div class="result-line" id="result-line"></div>
+    <div class="reason-line" id="reason-line"></div>
+    <button class="primary" id="rematch-btn">再戦を申し込む</button>
+    <div class="rematch-status" id="rematch-status"></div>
+  </div>
+</div>
+
+<button class="help-fab" id="help-fab" title="ルール" style="display:none;">📖</button>
+
+<script src="pieces.js"></script>
+<script src="engine.js"></script>
+<script src="ui.js"></script>
+<script src="net.js"></script>
+<script src="main.js"></script>
+</body>
+</html>
