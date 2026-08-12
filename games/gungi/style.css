@@ -65,7 +65,7 @@ input[type="text"] {
 .screen { display: none; padding: 24px 16px; }
 .screen.active { display: block; }
 
-#setup-screen, #mode-screen {
+#setup-screen, #mode-screen, #ai-setup-screen {
   max-width: 480px;
   margin: 8vh auto 0;
   text-align: center;
@@ -74,7 +74,7 @@ input[type="text"] {
 #setup-screen input { width: 220px; margin-bottom: 10px; }
 #status-line { margin-top: 16px; font-size: 13px; color: var(--accent); min-height: 18px; }
 
-.mode-options { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+.mode-options, .entry-options { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
 .mode-card {
   border: 1px solid var(--panel-border);
   background: var(--panel-bg);
@@ -84,6 +84,12 @@ input[type="text"] {
 }
 .mode-card h3 { color: var(--accent); }
 .mode-card p { color: var(--text-dim); font-size: 13px; margin: 6px 0 12px; }
+
+.btn-toggle-row { display: flex; gap: 8px; }
+.toggle-btn { flex: 1; }
+.toggle-btn.active { background: var(--accent); color: #241a15; font-weight: 700; border-color: var(--accent); }
+#ai-setup-screen .mode-options > button { margin-top: 4px; }
+#ai-back-btn { margin-top: 6px; }
 
 /* ============ ゲーム画面レイアウト ============ */
 #game-screen.active { display: flex; flex-direction: column; align-items: center; padding: 12px; }

@@ -11,17 +11,61 @@
 
 <!-- ============ 接続画面 ============ -->
 <div id="setup-screen" class="screen active">
-  <h1>軍儀 <span style="color:var(--text-dim); font-size:14px;">(HUNTER×HUNTER風 P2P対戦)</span></h1>
-  <p class="subtitle">合言葉を入力して、友達と接続しよう。同じ合言葉を入力した2人が自動的にホスト/ゲストとしてマッチングします。</p>
-  <input type="text" id="room-name" placeholder="例: secret123" maxlength="20"><br>
-  <button id="join-btn" class="primary">接続する</button>
-  <div id="status-line">待機中...</div>
-  <p class="note" style="margin-top:18px;">
+  <h1>軍儀 <span style="color:var(--text-dim); font-size:14px;">(HUNTER×HUNTER風 対戦ゲーム)</span></h1>
+
+  <div class="entry-options">
+    <div class="mode-card">
+      <h3>🌐 友達とP2P対戦</h3>
+      <p>合言葉を入力して、友達と接続しよう。同じ合言葉を入力した2人が自動的にホスト/ゲストとしてマッチングします。</p>
+      <input type="text" id="room-name" placeholder="例: secret123" maxlength="20"><br>
+      <button id="join-btn" class="primary">接続する</button>
+      <div id="status-line">待機中...</div>
+    </div>
+    <div class="mode-card">
+      <h3>🤖 1人プレイ(AI対戦)</h3>
+      <p>相手がいなくてもAI相手に練習できます。強さは3段階から選べます。</p>
+      <button id="start-ai-setup-btn">1人プレイを始める</button>
+    </div>
+  </div>
+
+  <p class="note" style="margin-top:18px; text-align:center;">
     <button id="help-btn-setup">📖 ルールを見る</button>
   </p>
 </div>
 
-<!-- ============ モード選択画面 ============ -->
+<!-- ============ 1人プレイ設定画面 ============ -->
+<div id="ai-setup-screen" class="screen">
+  <h1>1人プレイの設定</h1>
+  <div class="mode-options">
+    <div class="mode-card">
+      <h3>手番</h3>
+      <div class="btn-toggle-row" id="ai-side-toggle">
+        <button class="toggle-btn active" data-value="0">先手</button>
+        <button class="toggle-btn" data-value="1">後手</button>
+      </div>
+    </div>
+    <div class="mode-card">
+      <h3>AIの強さ</h3>
+      <div class="btn-toggle-row" id="ai-difficulty-toggle">
+        <button class="toggle-btn" data-value="easy">弱い</button>
+        <button class="toggle-btn active" data-value="normal">普通</button>
+        <button class="toggle-btn" data-value="hard">強い</button>
+      </div>
+    </div>
+    <div class="mode-card">
+      <h3>配置方式</h3>
+      <p>自由配置を選ぶとあなたの駒だけ手動で配置します(AI側は自動で配置します)。</p>
+      <div class="btn-toggle-row" id="ai-placement-toggle">
+        <button class="toggle-btn" data-value="manual">自由配置</button>
+        <button class="toggle-btn active" data-value="quick">固定配置</button>
+      </div>
+    </div>
+    <button id="ai-start-btn" class="primary">対局開始</button>
+    <button id="ai-back-btn">戻る</button>
+  </div>
+</div>
+
+<!-- ============ モード選択画面(P2P) ============ -->
 <div id="mode-screen" class="screen">
   <h1>対局モードを選ぶ</h1>
   <p class="subtitle">接続完了！ <span id="my-role-label"></span></p>
@@ -175,6 +219,7 @@
 
 <script src="pieces.js"></script>
 <script src="engine.js"></script>
+<script src="ai.js"></script>
 <script src="ui.js"></script>
 <script src="net.js"></script>
 <script src="main.js"></script>
