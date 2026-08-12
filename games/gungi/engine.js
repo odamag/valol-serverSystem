@@ -412,6 +412,7 @@
     territoryRows: territoryRows,
     findSui: findSui,
     isInCheck: isInCheck,
+    isSquareAttacked: isSquareAttacked,
     legalMovesForPiece: legalMovesForPiece,
     legalArataSquares: legalArataSquares,
     legalTurncoatTargets: legalTurncoatTargets,

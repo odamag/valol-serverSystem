@@ -7,6 +7,7 @@
   var UI = window.Gungi.UI;
   var Net = window.Gungi.Net;
   var P = window.Gungi.Pieces;
+  var AI = window.Gungi.AI;
 
   var myOwner = null;
   var state = null;
@@ -14,6 +15,10 @@
   var selection = null; // {mode:'board'|'hand', originX, originY, handType, targets:[{x,y,kind,...}]}
   var rematchReady = [false, false];
   var pieceLabel = function (t) { return P.PIECES[t].name; };
+
+  var vsAI = false;
+  var aiOwner = null;
+  var aiDifficulty = 'normal';
 
   function resetSelection() { selection = null; }
 
@@ -32,6 +37,31 @@
     els.joinBtn.addEventListener('click', function () {
       els.joinBtn.disabled = true;
       Net.join(els.roomName.value.trim());
+    });
+
+    // ============ 1人プレイ(AI対戦) ============
+    UI.wireToggleGroup(els.aiSideToggle);
+    UI.wireToggleGroup(els.aiDifficultyToggle);
+    UI.wireToggleGroup(els.aiPlacementToggle);
+
+    els.startAiSetupBtn.addEventListener('click', function () {
+      UI.showScreen('ai-setup-screen');
+    });
+    els.aiBackBtn.addEventListener('click', function () {
+      UI.showScreen('setup-screen');
+    });
+    els.aiStartBtn.addEventListener('click', function () {
+      var side = parseInt(UI.getToggleValue(els.aiSideToggle), 10);
+      aiDifficulty = UI.getToggleValue(els.aiDifficultyToggle);
+      var placementMode = UI.getToggleValue(els.aiPlacementToggle);
+
+      vsAI = true;
+      myOwner = side;
+      aiOwner = 1 - side;
+      state = Engine.createInitialState();
+      if (placementMode === 'quick') Engine.quickStartBothDefault(state);
+      enterGame();
+      triggerAiTurn();
     });
 
     els.startManualBtn.addEventListener('click', function () {
@@ -75,6 +105,11 @@
       afterLocalAction();
     });
     els.rematchBtn.addEventListener('click', function () {
+      if (vsAI) {
+        UI.hideModal('gameover-modal');
+        UI.showScreen('ai-setup-screen');
+        return;
+      }
       rematchReady[myOwner] = true;
       els.rematchBtn.disabled = true;
       Net.send({ t: 'REMATCH' });
@@ -190,8 +225,12 @@
     var origin = selection && selection.mode === 'board' ? { x: selection.originX, y: selection.originY } : null;
     UI.renderBoard(state, myOwner, highlight, origin, inspecting);
     UI.renderTurnIndicator(state, myOwner);
+    if (vsAI && state.turn === aiOwner && !state.result) {
+      els.turnIndicator.textContent = state.phase === 'placement' ? 'AIが配置中...' : 'AI思考中...';
+    }
 
     var oppOwner = 1 - myOwner;
+    els.oppHandTitle.textContent = vsAI ? '相手(AI)の持ち駒' : '相手の持ち駒';
     els.myHandTitle.textContent = '自分の持ち駒' + (state.phase !== 'ended' ? '(クリックして選択)' : '');
     UI.renderHandTray(els.myHandTray, state.hands[myOwner], myOwner, {
       clickable: canAct(myOwner),
@@ -328,6 +367,49 @@
 
   function afterLocalAction() {
     render();
+    if (vsAI) triggerAiTurn();
+  }
+
+  // ============ 1人プレイ: AIの手番処理 ============
+  function triggerAiTurn() {
+    if (!vsAI || !state || state.result) return;
+
+    if (state.phase === 'placement') {
+      if (state.turn === aiOwner && !state.placementPassed[aiOwner]) {
+        Engine.autoFillRemaining(state, aiOwner);
+        UI.addLog('AIが配置を完了しました');
+        resetSelection();
+        render();
+        setTimeout(triggerAiTurn, 50);
+      }
+      return;
+    }
+
+    if (state.phase === 'play' && state.turn === aiOwner) {
+      render(); // 「AI思考中...」表示を即座に出す
+      setTimeout(function () {
+        if (!state || state.result || state.turn !== aiOwner) return;
+        var action = AI.chooseAction(state, aiDifficulty);
+        if (!action) { render(); return; }
+        applyAiAction(action);
+        resetSelection();
+        render();
+        setTimeout(triggerAiTurn, 50);
+      }, 450 + Math.random() * 550);
+    }
+  }
+
+  function applyAiAction(action) {
+    if (action.kind === 'move') {
+      Engine.move(state, action.fromX, action.fromY, action.toX, action.toY);
+      UI.addLog('AI: ' + action.fromX + ',' + action.fromY + ' → ' + action.toX + ',' + action.toY);
+    } else if (action.kind === 'arata') {
+      Engine.arata(state, action.pieceType, action.x, action.y);
+      UI.addLog('AI: 新 ' + pieceLabel(action.pieceType) + ' を ' + action.x + ',' + action.y + ' へ');
+    } else if (action.kind === 'turncoat') {
+      Engine.turncoat(state, action.x, action.y);
+      UI.addLog('AI: 謀の寝返り (' + action.x + ',' + action.y + ')');
+    }
   }
 
   function showGameOver() {
@@ -348,8 +430,15 @@
       els.resultLine.textContent = (res.winner === 0 ? '先手' : '後手') + 'の勝ち' + (iWon ? '(あなたの勝利！)' : '(あなたの敗北)');
     }
     els.reasonLine.textContent = reasonText;
-    rematchReady = [false, false];
-    updateRematchStatus();
+    if (vsAI) {
+      els.rematchBtn.textContent = 'もう一度対局する';
+      els.rematchBtn.disabled = false;
+      els.rematchStatus.textContent = '';
+    } else {
+      els.rematchBtn.textContent = '再戦を申し込む';
+      rematchReady = [false, false];
+      updateRematchStatus();
+    }
     UI.showModal('gameover-modal');
   }
 })();

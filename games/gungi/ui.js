@@ -29,13 +29,31 @@
       'col-labels', 'row-labels', 'board',
       'help-modal', 'help-btn-setup', 'help-btn-game', 'help-close-btn', 'piece-legend', 'help-fab',
       'gameover-modal', 'result-line', 'reason-line', 'rematch-btn', 'rematch-status',
+      'start-ai-setup-btn', 'ai-setup-screen', 'ai-side-toggle', 'ai-difficulty-toggle',
+      'ai-placement-toggle', 'ai-start-btn', 'ai-back-btn',
     ].forEach(function (id) { els[id.replace(/-([a-z])/g, function (_, c) { return c.toUpperCase(); })] = $(id); });
   }
 
   function showScreen(name) {
-    ['setup-screen', 'mode-screen', 'game-screen'].forEach(function (id) {
+    ['setup-screen', 'ai-setup-screen', 'mode-screen', 'game-screen'].forEach(function (id) {
       $(id).classList.toggle('active', id === name);
     });
+  }
+
+  function wireToggleGroup(container, onChange) {
+    var buttons = container.querySelectorAll('.toggle-btn');
+    buttons.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        buttons.forEach(function (b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        if (onChange) onChange(btn.dataset.value);
+      });
+    });
+  }
+
+  function getToggleValue(container) {
+    var active = container.querySelector('.toggle-btn.active');
+    return active ? active.dataset.value : null;
   }
 
   function coordsFor(r, c, myOwner) {
@@ -313,6 +331,8 @@
     showModal: showModal,
     hideModal: hideModal,
     populateLegend: populateLegend,
+    wireToggleGroup: wireToggleGroup,
+    getToggleValue: getToggleValue,
     setOnHandClick: function (cb) { onHandClickCb = cb; },
     els: function () { return els; },
   };
