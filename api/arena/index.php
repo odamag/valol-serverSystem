@@ -49,10 +49,11 @@ $routes = [
     ['GET', '#^/v1/me/games$#',                     'arenaHandleMeGamesGet'],
     ['PUT', '#^/v1/me/games$#',                     'arenaHandleMeGamesPut'],
 
-    // 試合（Phase 3: ローカルモードのみ）
+    // 試合（ローカル / オンライン両モード）
     ['POST', '#^/v1/matches$#',                                       'arenaHandleMatchCreate'],
     ['GET',  '#^/v1/matches$#',                                       'arenaHandleMatchList'],
     ['GET',  '#^/v1/matches/(?P<public_id>[a-f0-9]{8})$#',            'arenaHandleMatchGet'],
+    ['POST', '#^/v1/matches/(?P<public_id>[a-f0-9]{8})/join$#',       'arenaHandleMatchJoin'],
     ['GET',  '#^/v1/matches/(?P<public_id>[a-f0-9]{8})/draft$#',      'arenaHandleMatchDraftGet'],
     ['POST', '#^/v1/matches/(?P<public_id>[a-f0-9]{8})/draft$#',      'arenaHandleMatchDraftPost'],
     ['POST', '#^/v1/matches/(?P<public_id>[a-f0-9]{8})/result$#',     'arenaHandleMatchResult'],

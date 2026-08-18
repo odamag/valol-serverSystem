@@ -2407,3 +2407,55 @@ body {
   .arena-h2h-form { flex-direction: column; align-items: stretch; }
   .arena-h2h-form .form-input { width: 100%; }
 }
+
+/* ── Arena Phase 4（オンライン対戦：ルーム作成・参加・手番タイマー） ── */
+
+/* ローカル/オンラインの切り替えタブ */
+.arena-mode-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+.arena-mode-tab {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--card-border);
+  color: var(--text-muted);
+  border-radius: 20px;
+  padding: 6px 16px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.arena-mode-tab:hover { background: rgba(255, 255, 255, 0.1); color: var(--text); }
+.arena-mode-tab--active { background: var(--accent); border-color: var(--accent); color: white; }
+
+/* ルームコード表示（作成直後・待機画面共通） */
+.arena-room-code-box { text-align: center; padding: 18px 14px; }
+.arena-room-code {
+  font-family: monospace;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px dashed var(--card-border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin: 10px 0;
+  word-break: break-all;
+}
+
+/* コードで参加フォーム */
+.arena-join-form { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.arena-join-input { flex: 1; min-width: 160px; font-family: monospace; letter-spacing: 0.08em; }
+.arena-join-form .btn { width: auto; }
+
+/* 手番タイマー */
+.arena-turn-timer {
+  display: inline-block;
+  margin-left: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.arena-turn-timer--urgent { color: var(--danger); }
+
+@media (max-width: 600px) {
+  .arena-room-code { font-size: 1.4rem; }
+  .arena-join-form { flex-direction: column; align-items: stretch; }
+  .arena-join-form .btn { width: 100%; }
+}

@@ -110,7 +110,25 @@ function arenaSerializeMatch(PDO $db, array $match): array {
     return $result;
 }
 
-// POST /v1/matches — 試合作成。Phase 3 は mode='local' のみ対応。
+// auth.db から user_id に対応するユーザー名を引く。見つからなければ null。
+// users テーブルが未作成の環境でも 500 にせず null を返す（PDOExceptionを握りつぶす）。
+function arenaLookupUsername(int $userId): ?string {
+    try {
+        $authDb = getDB();
+        $stmt = $authDb->prepare('SELECT username FROM users WHERE id = ?');
+        $stmt->execute([$userId]);
+        $row = $stmt->fetch();
+        return $row ? (string)$row['username'] : null;
+    } catch (PDOException $e) {
+        error_log('[arena] user lookup failed: ' . $e->getMessage());
+        return null;
+    }
+}
+
+// POST /v1/matches — 試合作成。
+// mode='local' は相手を必須指定して即 drafting へ。
+// mode='online' は相手指定を必須としない（room code で誰でも参加できる）。
+// opponent_user_id を指定した場合のみ、その相手だけが参加できる招待制になる。
 function arenaHandleMatchCreate(array $params, PDO $db): void {
     $user = requireArenaUser();
     $body = arenaReadJsonBody();
@@ -119,8 +137,8 @@ function arenaHandleMatchCreate(array $params, PDO $db): void {
     }
 
     $mode = (string)($body['mode'] ?? 'local');
-    if ($mode !== 'local') {
-        jsonResponse(['success' => false, 'message' => 'オンラインモードは現在準備中です（ローカルモードのみ利用できます）'], 400);
+    if (!in_array($mode, ['local', 'online'], true)) {
+        jsonResponse(['success' => false, 'message' => 'mode は "local" か "online" にしてください'], 400);
     }
 
     $gameSlug = trim((string)($body['game'] ?? ''));
@@ -145,44 +163,127 @@ function arenaHandleMatchCreate(array $params, PDO $db): void {
         jsonResponse(['success' => false, 'message' => 'ルールセットが見つかりません'], 404);
     }
 
-    $opponentId = (int)($body['opponent_user_id'] ?? 0);
-    if ($opponentId <= 0) {
-        jsonResponse(['success' => false, 'message' => '対戦相手を選択してください'], 400);
-    }
-    if ($opponentId === (int)$user['id']) {
-        jsonResponse(['success' => false, 'message' => '自分自身を対戦相手にはできません'], 400);
-    }
+    $opponentIdRaw = isset($body['opponent_user_id']) && $body['opponent_user_id'] !== ''
+        ? (int)$body['opponent_user_id'] : 0;
 
-    $opponentName = '';
-    try {
-        $authDb = getDB();
-        $stmt = $authDb->prepare('SELECT username FROM users WHERE id = ?');
-        $stmt->execute([$opponentId]);
-        $row = $stmt->fetch();
-        if (!$row) {
+    if ($mode === 'local') {
+        // ローカルモードは同じ画面で交互に打つため相手指定が必須
+        if ($opponentIdRaw <= 0) {
+            jsonResponse(['success' => false, 'message' => '対戦相手を選択してください'], 400);
+        }
+        if ($opponentIdRaw === (int)$user['id']) {
+            jsonResponse(['success' => false, 'message' => '自分自身を対戦相手にはできません'], 400);
+        }
+        $opponentName = arenaLookupUsername($opponentIdRaw);
+        if ($opponentName === null) {
             jsonResponse(['success' => false, 'message' => '対戦相手が見つかりません'], 404);
         }
-        $opponentName = (string)$row['username'];
-    } catch (PDOException $e) {
-        error_log('[arena] opponent lookup failed: ' . $e->getMessage());
-        jsonResponse(['success' => false, 'message' => '対戦相手が見つかりません'], 404);
+        $opponentId = $opponentIdRaw;
+    } else {
+        // オンラインモード：opponent_user_id は任意。指定時のみ招待制（その相手しか参加できない）
+        if ($opponentIdRaw > 0) {
+            if ($opponentIdRaw === (int)$user['id']) {
+                jsonResponse(['success' => false, 'message' => '自分自身を対戦相手にはできません'], 400);
+            }
+            $opponentName = arenaLookupUsername($opponentIdRaw);
+            if ($opponentName === null) {
+                jsonResponse(['success' => false, 'message' => '対戦相手が見つかりません'], 404);
+            }
+            $opponentId = $opponentIdRaw;
+        } else {
+            $opponentId = null;
+            $opponentName = null;
+        }
     }
 
     $publicId = arenaGenerateMatchPublicId($db);
     $now = time();
 
-    // ローカルモードは相手が既に確定しているので即 drafting へ（turn_deadline は常にNULL）
+    // ローカルモードは相手が既に確定しているので即 drafting へ（turn_deadline は常にNULL）。
+    // オンラインモードは waiting のまま public_id（room code）を発行し、
+    // 相手の /join を待つ（turn_deadline は join 時に設定する）。
+    $status = $mode === 'local' ? 'drafting' : 'waiting';
+
     $stmt = $db->prepare("
         INSERT INTO arena_matches
             (public_id, game_id, ruleset_id, mode, status, player_a_id, player_a_name, player_b_id, player_b_name,
              turn_index, turn_deadline, version, created_by, created_at, updated_at)
-        VALUES (?, ?, ?, 'local', 'drafting', ?, ?, ?, ?, 0, NULL, 0, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, 0, ?, ?, ?)
     ");
     $stmt->execute([
-        $publicId, (int)$game['id'], (int)$ruleset['id'],
+        $publicId, (int)$game['id'], (int)$ruleset['id'], $mode, $status,
         (int)$user['id'], $user['username'], $opponentId, $opponentName,
         (int)$user['id'], $now, $now,
     ]);
+
+    $match = arenaLoadMatch($db, $publicId);
+    jsonResponse(['success' => true, 'match' => arenaSerializeMatch($db, $match)]);
+}
+
+// POST /v1/matches/{public_id}/join — オンライン戦に相手として参加する。
+// public_id（room code）さえ知っていれば、招待制でない限り誰でも参加できる。
+// 参加していない第三者に試合詳細を見せないよう、事前の arenaRequireMatchAccess は使わない。
+function arenaHandleMatchJoin(array $params, PDO $db): void {
+    $user = requireArenaUser();
+    $publicId = $params['public_id'] ?? '';
+
+    $match = arenaLoadMatch($db, $publicId);
+    if (!$match) {
+        jsonResponse(['success' => false, 'message' => '試合が見つかりません'], 404);
+    }
+    if ($match['mode'] !== 'online') {
+        jsonResponse(['success' => false, 'message' => 'この試合はオンライン対戦ではありません'], 400);
+    }
+
+    $uid = (int)$user['id'];
+    if ($uid === (int)$match['player_a_id']) {
+        jsonResponse(['success' => false, 'message' => '自分が作成した試合には参加者として参加できません'], 400);
+    }
+    if ($match['status'] !== 'waiting') {
+        jsonResponse(['success' => false, 'message' => 'この試合はすでに開始しているか、参加者を募集していません'], 400);
+    }
+    if ($match['player_b_id'] !== null && (int)$match['player_b_id'] !== $uid) {
+        jsonResponse(['success' => false, 'message' => 'この試合は招待制のため参加できません'], 403);
+    }
+
+    $ruleset = arenaLoadRuleset($db, (int)$match['ruleset_id']);
+    if (!$ruleset) {
+        jsonResponse(['success' => false, 'message' => 'ルールセットが見つかりません'], 404);
+    }
+
+    $now = time();
+    $deadline = (int)$ruleset['turn_seconds'] > 0 ? $now + (int)$ruleset['turn_seconds'] : null;
+
+    $db->exec('BEGIN IMMEDIATE');
+    try {
+        // ロック取得後に再確認（同時参加のTOCTOU対策）
+        $checkStmt = $db->prepare('SELECT status, player_a_id, player_b_id FROM arena_matches WHERE id = ?');
+        $checkStmt->execute([(int)$match['id']]);
+        $fresh = $checkStmt->fetch();
+        $freshBId = $fresh['player_b_id'] !== null ? (int)$fresh['player_b_id'] : null;
+        if (
+            !$fresh
+            || $fresh['status'] !== 'waiting'
+            || (int)$fresh['player_a_id'] === $uid
+            || ($freshBId !== null && $freshBId !== $uid)
+        ) {
+            $db->exec('ROLLBACK');
+            jsonResponse(['success' => false, 'message' => 'この試合には参加できません'], 409);
+        }
+
+        $upd = $db->prepare("
+            UPDATE arena_matches
+            SET player_b_id = ?, player_b_name = ?, status = 'drafting',
+                turn_index = 0, turn_deadline = ?, version = version + 1, updated_at = ?
+            WHERE id = ?
+        ");
+        $upd->execute([$uid, $user['username'], $deadline, $now, (int)$match['id']]);
+
+        $db->exec('COMMIT');
+    } catch (Throwable $e) {
+        $db->exec('ROLLBACK');
+        throw $e;
+    }
 
     $match = arenaLoadMatch($db, $publicId);
     jsonResponse(['success' => true, 'match' => arenaSerializeMatch($db, $match)]);
@@ -235,11 +336,20 @@ function arenaHandleMatchGet(array $params, PDO $db): void {
     jsonResponse(['success' => true, 'match' => arenaSerializeMatch($db, $match)]);
 }
 
-// GET /v1/matches/{public_id}/draft — ドラフト状態
+// GET /v1/matches/{public_id}/draft?since=N — ドラフト状態。
+// 遅延タイムアウト処理を version 比較の前に必ず通す（そうしないと期限切れの手番が
+// ポーラーから見えないまま放置される）。version <= since ならボディ無しの 304 を返し、
+// その場合は arenaDraftState()/arenaSerializeMatch() を一切呼ばない（ポーリングを軽く保つ）。
 function arenaHandleMatchDraftGet(array $params, PDO $db): void {
     $user = requireArenaUser();
     $match = arenaRequireMatchAccess($db, $params['public_id'] ?? '', $user);
     $match = arenaRefreshMatchForRead($db, $match);
+
+    $since = isset($_GET['since']) && is_numeric($_GET['since']) ? (int)$_GET['since'] : -1;
+    if ((int)$match['version'] <= $since) {
+        http_response_code(304);
+        exit;
+    }
 
     $ruleset = arenaLoadRuleset($db, (int)$match['ruleset_id']);
     if (!$ruleset) {
