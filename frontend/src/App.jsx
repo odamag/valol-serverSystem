@@ -15,6 +15,9 @@ import ValorantPredict from './pages/ValorantPredict.jsx'
 import ArenaHome from './pages/ArenaHome.jsx'
 import ArenaMyGames from './pages/ArenaMyGames.jsx'
 import ArenaAdmin from './pages/ArenaAdmin.jsx'
+import ArenaDraft from './pages/ArenaDraft.jsx'
+import ArenaMatch from './pages/ArenaMatch.jsx'
+import ArenaRanking from './pages/ArenaRanking.jsx'
 
 export const AuthContext = createContext(null)
 
@@ -72,6 +75,18 @@ function App() {
               <Route
                 path="arena/admin"
                 element={auth.loggedIn ? <ArenaAdmin /> : <Navigate to="/login" replace />}
+              />
+              <Route
+                path="arena/ranking"
+                element={auth.loggedIn ? <ArenaRanking /> : <Navigate to="/login" replace />}
+              />
+              <Route
+                path="arena/draft/:publicId"
+                element={auth.loggedIn ? <ArenaDraft /> : <Navigate to="/login" replace />}
+              />
+              <Route
+                path="arena/:publicId"
+                element={auth.loggedIn ? <ArenaMatch /> : <Navigate to="/login" replace />}
               />
             </Route>
             <Route path="*" element={<Navigate to="/server" replace />} />

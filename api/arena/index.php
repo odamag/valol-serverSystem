@@ -6,9 +6,13 @@ require_once dirname(__DIR__) . '/common.php';
 require_once __DIR__ . '/lib/db.php';
 require_once __DIR__ . '/lib/auth.php';
 require_once __DIR__ . '/lib/seed.php';
+require_once __DIR__ . '/lib/draft.php';
+require_once __DIR__ . '/lib/rating.php';
 require_once __DIR__ . '/routes/read.php';
 require_once __DIR__ . '/routes/admin.php';
 require_once __DIR__ . '/routes/me.php';
+require_once __DIR__ . '/routes/match.php';
+require_once __DIR__ . '/routes/ranking.php';
 
 // ── リクエストパスの解決 ──────────────────────────────────────────
 // 1. ?path= （PHPビルトインサーバーは .htaccess を読まないため、ローカル検証用の
@@ -44,6 +48,21 @@ $routes = [
     // 所持ゲーム
     ['GET', '#^/v1/me/games$#',                     'arenaHandleMeGamesGet'],
     ['PUT', '#^/v1/me/games$#',                     'arenaHandleMeGamesPut'],
+
+    // 試合（Phase 3: ローカルモードのみ）
+    ['POST', '#^/v1/matches$#',                                       'arenaHandleMatchCreate'],
+    ['GET',  '#^/v1/matches$#',                                       'arenaHandleMatchList'],
+    ['GET',  '#^/v1/matches/(?P<public_id>[a-f0-9]{8})$#',            'arenaHandleMatchGet'],
+    ['GET',  '#^/v1/matches/(?P<public_id>[a-f0-9]{8})/draft$#',      'arenaHandleMatchDraftGet'],
+    ['POST', '#^/v1/matches/(?P<public_id>[a-f0-9]{8})/draft$#',      'arenaHandleMatchDraftPost'],
+    ['POST', '#^/v1/matches/(?P<public_id>[a-f0-9]{8})/result$#',     'arenaHandleMatchResult'],
+    ['POST', '#^/v1/matches/(?P<public_id>[a-f0-9]{8})/confirm$#',    'arenaHandleMatchConfirm'],
+    ['POST', '#^/v1/matches/(?P<public_id>[a-f0-9]{8})/cancel$#',     'arenaHandleMatchCancel'],
+
+    // ランキング
+    ['GET', '#^/v1/ranking$#',                       'arenaHandleRanking'],
+    ['GET', '#^/v1/players/(?P<id>\d+)$#',           'arenaHandlePlayer'],
+    ['GET', '#^/v1/head-to-head$#',                  'arenaHandleHeadToHead'],
 
     // ゲームマスタ管理（管理者のみ。各ハンドラ内で requireArenaAdmin() を呼ぶ）
     ['POST',   '#^/v1/admin/games$#',                                     'arenaHandleAdminGameCreate'],
