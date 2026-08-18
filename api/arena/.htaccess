@@ -1,0 +1,16 @@
+# ── Arena API 用リライト ────────────────────────────
+# ルートの .htaccess の `RewriteRule ^api/ - [L]` はそのファイル内のルールを
+# 打ち切るだけで、サブディレクトリの .htaccess には影響しない（per-dir ルールは
+# 継承されない）。そのためここで改めて RewriteEngine On が必要。
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /api/arena/
+
+    # 実ファイル・実ディレクトリはそのまま配信
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # それ以外はすべてフロントコントローラへ
+    RewriteRule ^(.*)$ index.php?path=/$1 [QSA,L]
+</IfModule>

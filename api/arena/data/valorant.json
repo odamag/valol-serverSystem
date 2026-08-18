@@ -1,0 +1,51 @@
+{
+  "slug": "valorant",
+  "name": "VALORANT",
+  "entry_label": "エージェント",
+  "icon": "🎯",
+  "sort_order": 2,
+  "entry_source": "manual",
+  "entries": [
+    { "slug": "brimstone", "name": "Brimstone", "tags": "controller" },
+    { "slug": "viper", "name": "Viper", "tags": "controller" },
+    { "slug": "omen", "name": "Omen", "tags": "controller" },
+    { "slug": "astra", "name": "Astra", "tags": "controller" },
+    { "slug": "harbor", "name": "Harbor", "tags": "controller" },
+    { "slug": "clove", "name": "Clove", "tags": "controller" },
+    { "slug": "killjoy", "name": "Killjoy", "tags": "sentinel" },
+    { "slug": "cypher", "name": "Cypher", "tags": "sentinel" },
+    { "slug": "sage", "name": "Sage", "tags": "sentinel" },
+    { "slug": "chamber", "name": "Chamber", "tags": "sentinel" },
+    { "slug": "deadlock", "name": "Deadlock", "tags": "sentinel" },
+    { "slug": "vyse", "name": "Vyse", "tags": "sentinel" },
+    { "slug": "sova", "name": "Sova", "tags": "initiator" },
+    { "slug": "breach", "name": "Breach", "tags": "initiator" },
+    { "slug": "skye", "name": "Skye", "tags": "initiator" },
+    { "slug": "kayo", "name": "KAY/O", "tags": "initiator" },
+    { "slug": "fade", "name": "Fade", "tags": "initiator" },
+    { "slug": "gekko", "name": "Gekko", "tags": "initiator" },
+    { "slug": "tejo", "name": "Tejo", "tags": "initiator" },
+    { "slug": "phoenix", "name": "Phoenix", "tags": "duelist" },
+    { "slug": "jett", "name": "Jett", "tags": "duelist" },
+    { "slug": "reyna", "name": "Reyna", "tags": "duelist" },
+    { "slug": "raze", "name": "Raze", "tags": "duelist" },
+    { "slug": "yoru", "name": "Yoru", "tags": "duelist" },
+    { "slug": "neon", "name": "Neon", "tags": "duelist" },
+    { "slug": "iso", "name": "Iso", "tags": "duelist" },
+    { "slug": "waylay", "name": "Waylay", "tags": "duelist" }
+  ],
+  "rulesets": [
+    {
+      "slug": "standard",
+      "name": "標準 BAN2/PICK1",
+      "turn_seconds": 30,
+      "is_default": true,
+      "sequence": [
+        { "t": "ban", "s": "A" },
+        { "t": "ban", "s": "B" },
+        { "t": "pick", "s": "A" },
+        { "t": "pick", "s": "B" }
+      ]
+    }
+  ]
+}
