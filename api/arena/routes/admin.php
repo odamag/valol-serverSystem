@@ -307,23 +307,62 @@ function arenaHandleAdminEntryImport(array $params, PDO $db): void {
     $raw     = file_get_contents('php://input');
     $decoded = json_decode($raw, true);
 
+    // 受け付ける形式:
+    //   1. 改行区切りのプレーンテキスト（管理画面の一括インポートはこれを送る）
+    //   2. JSON配列  ["リュウ", ...] / [{"name":"リュウ", ...}, ...]
+    //   3. JSONオブジェクト {"text":"改行区切り"} / {"names":[...]}（ボット等から扱いやすい形）
+    // JSONオブジェクトを配列としてそのまま舐めると、値が丸ごと1件の名前になって
+    // 改行入りの壊れたエントリーが黙って作られるため、明示的に分岐する。
     $items = [];
     if (is_array($decoded)) {
-        foreach ($decoded as $entry) {
+        $isList = ($decoded === []) || (array_keys($decoded) === range(0, count($decoded) - 1));
+        if ($isList) {
+            $source = $decoded;
+        } elseif (isset($decoded['text']) && is_string($decoded['text'])) {
+            $source = preg_split('/\r\n|\r|\n/', $decoded['text']);
+        } elseif (isset($decoded['names']) && is_array($decoded['names'])) {
+            $source = $decoded['names'];
+        } else {
+            jsonResponse([
+                'success' => false,
+                'message' => 'インポート形式が不正です（配列、{"text":"改行区切り"}、{"names":[...]} のいずれか）',
+            ], 400);
+            return;
+        }
+        foreach ($source as $entry) {
             if (is_string($entry)) {
                 $items[] = ['name' => $entry];
-            } elseif (is_array($entry) && !empty($entry['name'])) {
+            } elseif (is_array($entry) && isset($entry['name']) && is_string($entry['name'])) {
                 $items[] = $entry;
             }
         }
     } else {
         foreach (preg_split('/\r\n|\r|\n/', (string)$raw) as $line) {
-            $line = trim($line);
-            if ($line !== '') {
-                $items[] = ['name' => $line];
-            }
+            $items[] = ['name' => $line];
         }
     }
+
+    // どの経路で来ても、改行を含む名前は行ごとに分割し、空行は捨てる。
+    $normalized = [];
+    foreach ($items as $item) {
+        foreach (preg_split('/\r\n|\r|\n/', (string)$item['name']) as $line) {
+            $line = trim($line);
+            if ($line === '') {
+                continue;
+            }
+            if (mb_strlen($line) > 100) {
+                jsonResponse([
+                    'success' => false,
+                    'message' => '名前が長すぎます（100文字以内）: ' . mb_substr($line, 0, 20) . '…',
+                ], 400);
+                return;
+            }
+            $row = $item;
+            $row['name'] = $line;
+            $normalized[] = $row;
+        }
+    }
+    $items = $normalized;
 
     if (empty($items)) {
         jsonResponse(['success' => false, 'message' => 'インポートするデータがありません'], 400);

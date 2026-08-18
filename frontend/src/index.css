@@ -2225,3 +2225,15 @@ body {
   .arena-entry-actions { margin-left: 0; width: 100%; }
   .arena-key-item, .arena-admin-item { flex-wrap: wrap; }
 }
+
+/* 管理者未登録時の案内バナー */
+.arena-notice {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid var(--warning);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 18px;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}

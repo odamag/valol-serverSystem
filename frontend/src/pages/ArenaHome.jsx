@@ -7,7 +7,7 @@ export default function ArenaHome() {
 
   useEffect(() => {
     arenaApi.get('/v1/me')
-      .then(data => setIsAdmin(!!data.is_admin))
+      .then(data => setIsAdmin(!!data.is_admin || !!data.admin_bootstrap_available))
       .catch(() => setIsAdmin(false))
   }, [])
 

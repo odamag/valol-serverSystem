@@ -15,26 +15,42 @@ const EMPTY_ENTRY_FORM = { slug: '', name: '', image_url: '', tags: '' }
 // ルート自体は auth.loggedIn だけでガードされているので、ここで GET /v1/me の
 // is_admin を見て管理者以外を弾く。サーバー側 requireArenaAdmin() が本体の防御であり、
 // これは表示制御にすぎない。
-// 注意: arena_admins が空の状態（誰も管理者がいない）でこのゲートを先に評価すると、
-// 自己ブートストラップ（最初に管理APIを叩いた人が管理者になる仕組み）を
-// フロント側の画面からは起動できなくなる。その場合は一度だけ curl 等で任意の
-// /v1/admin/* を叩いて自分を管理者にしてから、この画面を開く運用にする。
+//
+// まだ誰も管理者がいない（arena_admins が空）場合は admin_bootstrap_available が
+// true になり、この画面を開ける。ロリポップ ライトプランには SSH が無く CLI を
+// 叩けないため、最初の管理者は必ず Web 画面から登録できる必要がある。
+// 実際の登録は、この画面で最初の管理APIを叩いた時点で
+// サーバー側の requireArenaAdmin() が行う。
 export default function ArenaAdmin() {
-  const [meState, setMeState] = useState({ loading: true, isAdmin: false })
+  const [meState, setMeState] = useState({ loading: true, isAdmin: false, canBootstrap: false })
 
   useEffect(() => {
     arenaApi.get('/v1/me')
-      .then(data => setMeState({ loading: false, isAdmin: !!data.is_admin }))
-      .catch(() => setMeState({ loading: false, isAdmin: false }))
+      .then(data => setMeState({
+        loading: false,
+        isAdmin: !!data.is_admin,
+        canBootstrap: !!data.admin_bootstrap_available,
+      }))
+      .catch(() => setMeState({ loading: false, isAdmin: false, canBootstrap: false }))
   }, [])
 
   if (meState.loading) {
     return <p className="arena-loading">読み込み中…</p>
   }
-  if (!meState.isAdmin) {
+  if (!meState.isAdmin && !meState.canBootstrap) {
     return <Navigate to="/arena" replace />
   }
-  return <ArenaAdminContent />
+  return (
+    <>
+      {!meState.isAdmin && meState.canBootstrap && (
+        <div className="arena-notice">
+          まだ管理者が登録されていません。この画面で最初の操作を行うと、
+          あなたが最初の管理者として登録されます。
+        </div>
+      )}
+      <ArenaAdminContent />
+    </>
+  )
 }
 
 function ArenaAdminContent() {

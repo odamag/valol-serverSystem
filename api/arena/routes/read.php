@@ -135,12 +135,20 @@ function arenaHandleGameEntries(array $params, PDO $db): void {
 }
 
 // GET /v1/me — 現在のユーザー + is_admin（フロントで管理者リンクの表示可否に使う）
+//
+// admin_bootstrap_available: arena_admins がまだ空かどうか。
+// ロリポップ ライトプランには SSH が無く CLI を叩けないため、最初の管理者は
+// Web 画面から登録できなければならない。このフラグが true のときはフロント側も
+// 管理画面を開けるようにし、そこで管理APIを叩いた時点で
+// requireArenaAdmin() が本人を最初の管理者として登録する。
 function arenaHandleMe(array $params, PDO $db): void {
     $user = requireArenaUser();
+    $adminCount = (int)$db->query('SELECT COUNT(*) FROM arena_admins')->fetchColumn();
     jsonResponse([
-        'success'  => true,
-        'id'       => $user['id'],
-        'username' => $user['username'],
-        'is_admin' => isArenaAdmin($db, $user['id']),
+        'success'                   => true,
+        'id'                        => $user['id'],
+        'username'                  => $user['username'],
+        'is_admin'                  => isArenaAdmin($db, $user['id']),
+        'admin_bootstrap_available' => $adminCount === 0,
     ]);
 }
