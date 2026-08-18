@@ -7,6 +7,8 @@ require_once __DIR__ . '/lib/db.php';
 require_once __DIR__ . '/lib/auth.php';
 require_once __DIR__ . '/lib/seed.php';
 require_once __DIR__ . '/routes/read.php';
+require_once __DIR__ . '/routes/admin.php';
+require_once __DIR__ . '/routes/me.php';
 
 // ── リクエストパスの解決 ──────────────────────────────────────────
 // 1. ?path= （PHPビルトインサーバーは .htaccess を読まないため、ローカル検証用の
@@ -38,6 +40,30 @@ $routes = [
     ['GET', '#^/v1/games$#',                       'arenaHandleGames'],
     ['GET', '#^/v1/games/(?P<slug>[a-z0-9_-]+)/entries$#', 'arenaHandleGameEntries'],
     ['GET', '#^/v1/me$#',                          'arenaHandleMe'],
+
+    // 所持ゲーム
+    ['GET', '#^/v1/me/games$#',                     'arenaHandleMeGamesGet'],
+    ['PUT', '#^/v1/me/games$#',                     'arenaHandleMeGamesPut'],
+
+    // ゲームマスタ管理（管理者のみ。各ハンドラ内で requireArenaAdmin() を呼ぶ）
+    ['POST',   '#^/v1/admin/games$#',                                     'arenaHandleAdminGameCreate'],
+    ['PATCH',  '#^/v1/admin/games/(?P<slug>[a-z0-9_-]+)$#',               'arenaHandleAdminGameUpdate'],
+    ['DELETE', '#^/v1/admin/games/(?P<slug>[a-z0-9_-]+)$#',               'arenaHandleAdminGameDelete'],
+    ['POST',   '#^/v1/admin/games/(?P<slug>[a-z0-9_-]+)/entries$#',       'arenaHandleAdminEntryCreate'],
+    ['POST',   '#^/v1/admin/games/(?P<slug>[a-z0-9_-]+)/entries/import$#', 'arenaHandleAdminEntryImport'],
+    ['PATCH',  '#^/v1/admin/entries/(?P<id>\d+)$#',                       'arenaHandleAdminEntryUpdate'],
+    ['DELETE', '#^/v1/admin/entries/(?P<id>\d+)$#',                       'arenaHandleAdminEntryDelete'],
+    ['POST',   '#^/v1/admin/games/(?P<slug>[a-z0-9_-]+)/rulesets$#',      'arenaHandleAdminRulesetCreate'],
+    ['PATCH',  '#^/v1/admin/rulesets/(?P<id>\d+)$#',                      'arenaHandleAdminRulesetUpdate'],
+    ['DELETE', '#^/v1/admin/rulesets/(?P<id>\d+)$#',                      'arenaHandleAdminRulesetDelete'],
+    ['POST',   '#^/v1/admin/games/(?P<slug>[a-z0-9_-]+)/sync$#',          'arenaHandleAdminGameSync'],
+    ['POST',   '#^/v1/admin/games/(?P<slug>[a-z0-9_-]+)/reseed$#',        'arenaHandleAdminGameReseed'],
+    ['GET',    '#^/v1/admin/keys$#',                                     'arenaHandleAdminKeysList'],
+    ['POST',   '#^/v1/admin/keys$#',                                     'arenaHandleAdminKeyCreate'],
+    ['DELETE', '#^/v1/admin/keys/(?P<id>\d+)$#',                         'arenaHandleAdminKeyDelete'],
+    ['GET',    '#^/v1/admin/admins$#',                                   'arenaHandleAdminAdminsList'],
+    ['POST',   '#^/v1/admin/admins$#',                                   'arenaHandleAdminAdminCreate'],
+    ['DELETE', '#^/v1/admin/admins/(?P<id>\d+)$#',                       'arenaHandleAdminAdminDelete'],
 ];
 
 function arenaDispatch(array $routes, string $path, string $method, PDO $db): void {

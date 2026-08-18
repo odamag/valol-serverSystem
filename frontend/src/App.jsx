@@ -12,6 +12,9 @@ import LoLInfo from './pages/LoLInfo.jsx'
 import LoLStreak from './pages/LoLStreak.jsx'
 import LoLPredict from './pages/LoLPredict.jsx'
 import ValorantPredict from './pages/ValorantPredict.jsx'
+import ArenaHome from './pages/ArenaHome.jsx'
+import ArenaMyGames from './pages/ArenaMyGames.jsx'
+import ArenaAdmin from './pages/ArenaAdmin.jsx'
 
 export const AuthContext = createContext(null)
 
@@ -57,6 +60,18 @@ function App() {
               <Route
                 path="profile"
                 element={auth.loggedIn ? <Profile /> : <Navigate to="/login" replace />}
+              />
+              <Route
+                path="arena"
+                element={auth.loggedIn ? <ArenaHome /> : <Navigate to="/login" replace />}
+              />
+              <Route
+                path="arena/my-games"
+                element={auth.loggedIn ? <ArenaMyGames /> : <Navigate to="/login" replace />}
+              />
+              <Route
+                path="arena/admin"
+                element={auth.loggedIn ? <ArenaAdmin /> : <Navigate to="/login" replace />}
               />
             </Route>
             <Route path="*" element={<Navigate to="/server" replace />} />
