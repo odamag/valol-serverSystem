@@ -130,7 +130,7 @@ function arenaLookupUsername(int $userId): ?string {
 // mode='online' は相手指定を必須としない（room code で誰でも参加できる）。
 // opponent_user_id を指定した場合のみ、その相手だけが参加できる招待制になる。
 function arenaHandleMatchCreate(array $params, PDO $db): void {
-    $user = requireArenaUser();
+    $user = arenaActor($db, 'write');
     $body = arenaReadJsonBody();
     if ($err = arenaCheckAllowedFields($body, ['game', 'ruleset', 'mode', 'opponent_user_id'])) {
         jsonResponse(['success' => false, 'message' => $err], 400);
@@ -224,7 +224,7 @@ function arenaHandleMatchCreate(array $params, PDO $db): void {
 // public_id（room code）さえ知っていれば、招待制でない限り誰でも参加できる。
 // 参加していない第三者に試合詳細を見せないよう、事前の arenaRequireMatchAccess は使わない。
 function arenaHandleMatchJoin(array $params, PDO $db): void {
-    $user = requireArenaUser();
+    $user = arenaActor($db, 'write');
     $publicId = $params['public_id'] ?? '';
 
     $match = arenaLoadMatch($db, $publicId);
@@ -291,7 +291,7 @@ function arenaHandleMatchJoin(array $params, PDO $db): void {
 
 // GET /v1/matches — 自分が参加している試合の一覧
 function arenaHandleMatchList(array $params, PDO $db): void {
-    $user = requireArenaUser();
+    $user = arenaActor($db, 'read');
     $uid = (int)$user['id'];
 
     $status   = isset($_GET['status']) && $_GET['status'] !== '' ? (string)$_GET['status'] : null;
@@ -329,7 +329,7 @@ function arenaHandleMatchList(array $params, PDO $db): void {
 
 // GET /v1/matches/{public_id} — 試合詳細
 function arenaHandleMatchGet(array $params, PDO $db): void {
-    $user = requireArenaUser();
+    $user = arenaActor($db, 'read');
     $match = arenaRequireMatchAccess($db, $params['public_id'] ?? '', $user);
     $match = arenaRefreshMatchForRead($db, $match);
 
@@ -341,7 +341,7 @@ function arenaHandleMatchGet(array $params, PDO $db): void {
 // ポーラーから見えないまま放置される）。version <= since ならボディ無しの 304 を返し、
 // その場合は arenaDraftState()/arenaSerializeMatch() を一切呼ばない（ポーリングを軽く保つ）。
 function arenaHandleMatchDraftGet(array $params, PDO $db): void {
-    $user = requireArenaUser();
+    $user = arenaActor($db, 'read');
     $match = arenaRequireMatchAccess($db, $params['public_id'] ?? '', $user);
     $match = arenaRefreshMatchForRead($db, $match);
 
@@ -365,7 +365,7 @@ function arenaHandleMatchDraftGet(array $params, PDO $db): void {
 
 // POST /v1/matches/{public_id}/draft — BAN/PICK実行 {seq, action, entry_id}
 function arenaHandleMatchDraftPost(array $params, PDO $db): void {
-    $user = requireArenaUser();
+    $user = arenaActor($db, 'write');
     $match = arenaRequireMatchAccess($db, $params['public_id'] ?? '', $user);
 
     $body = arenaReadJsonBody();
@@ -407,7 +407,7 @@ function arenaHandleMatchDraftPost(array $params, PDO $db): void {
 
 // POST /v1/matches/{public_id}/result — 結果申告 {winner:'A'|'B', score_a, score_b}
 function arenaHandleMatchResult(array $params, PDO $db): void {
-    $user = requireArenaUser();
+    $user = arenaActor($db, 'write');
     $match = arenaRequireMatchAccess($db, $params['public_id'] ?? '', $user);
     $match = arenaMaybeAutoConfirm($db, $match);
 
@@ -443,7 +443,7 @@ function arenaHandleMatchResult(array $params, PDO $db): void {
 
 // POST /v1/matches/{public_id}/confirm — 相手が結果を承認 → Elo確定
 function arenaHandleMatchConfirm(array $params, PDO $db): void {
-    $user = requireArenaUser();
+    $user = arenaActor($db, 'write');
     $match = arenaRequireMatchAccess($db, $params['public_id'] ?? '', $user);
     // 既に48h経過していれば、相手がここに来る前に自動承認されている場合がある
     $match = arenaMaybeAutoConfirm($db, $match);
@@ -464,7 +464,7 @@ function arenaHandleMatchConfirm(array $params, PDO $db): void {
 
 // POST /v1/matches/{public_id}/cancel — 中止
 function arenaHandleMatchCancel(array $params, PDO $db): void {
-    $user = requireArenaUser();
+    $user = arenaActor($db, 'write');
     $match = arenaRequireMatchAccess($db, $params['public_id'] ?? '', $user);
 
     if (!in_array($match['status'], ['waiting', 'drafting', 'playing'], true)) {

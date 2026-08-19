@@ -1,9 +1,9 @@
 <?php
 // Phase 2: 所持ゲーム（arena_user_games）関連ハンドラ。
 
-// GET /v1/me/games — 自分の所持ゲーム一覧
+// GET /v1/me/games — 自分の所持ゲーム一覧（read スコープのAPIキーも可）
 function arenaHandleMeGamesGet(array $params, PDO $db): void {
-    $user = requireArenaUser();
+    $user = arenaActor($db, 'read');
 
     $stmt = $db->prepare('
         SELECT g.id, g.slug, g.name, g.entry_label, g.icon
@@ -27,9 +27,9 @@ function arenaHandleMeGamesGet(array $params, PDO $db): void {
 }
 
 // PUT /v1/me/games — 所持ゲームを {slugs:[...]} で一括置換する（削除→挿入をトランザクションで実行）
-// 存在しないスラッグはエラーにせず無視する
+// 存在しないスラッグはエラーにせず無視する（write スコープのAPIキーも可）
 function arenaHandleMeGamesPut(array $params, PDO $db): void {
-    $user = requireArenaUser();
+    $user = arenaActor($db, 'write');
 
     $raw  = file_get_contents('php://input');
     $body = json_decode($raw, true);

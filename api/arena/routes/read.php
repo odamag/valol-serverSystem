@@ -1,9 +1,9 @@
 <?php
 // Phase 1: 読み取り系ハンドラ（/v1/users, /v1/games, /v1/games/{slug}/entries, /v1/me）
 
-// GET /v1/users — 対戦相手を選ぶためのユーザー一覧（ログイン必須）
+// GET /v1/users — 対戦相手を選ぶためのユーザー一覧（ログイン必須。read スコープのAPIキーも可）
 function arenaHandleUsers(array $params, PDO $db): void {
-    $user = requireArenaUser();
+    $user = arenaActor($db, 'read');
 
     try {
         $authDb = getDB();
@@ -25,13 +25,11 @@ function arenaHandleUsers(array $params, PDO $db): void {
 
 // GET /v1/games — 有効なゲーム一覧（+各ゲームの有効なルールセット）
 // ?playable_with={user_id} で、自分と指定相手の両方が所持しているゲームだけに絞る
+// read スコープのAPIキーも利用可（Discordボットが対戦候補ゲームを問い合わせる用途）
 function arenaHandleGames(array $params, PDO $db): void {
+    $actor        = arenaActor($db, 'read');
     $playableWith = isset($_GET['playable_with']) ? (int)$_GET['playable_with'] : null;
-    $viewerId     = null;
-    if ($playableWith !== null) {
-        $user     = requireArenaUser();
-        $viewerId = $user['id'];
-    }
+    $viewerId     = $playableWith !== null ? $actor['id'] : null;
 
     $sql = 'SELECT * FROM arena_games WHERE enabled = 1';
     $args = [];
@@ -88,7 +86,9 @@ function arenaHandleGames(array $params, PDO $db): void {
 }
 
 // GET /v1/games/{slug}/entries — 有効なエントリー一覧。ETag で 304 対応
+// read スコープのAPIキーも利用可
 function arenaHandleGameEntries(array $params, PDO $db): void {
+    arenaActor($db, 'read');
     $slug = $params['slug'] ?? '';
 
     $stmt = $db->prepare('SELECT id FROM arena_games WHERE slug = ? AND enabled = 1');
@@ -141,8 +141,12 @@ function arenaHandleGameEntries(array $params, PDO $db): void {
 // Web 画面から登録できなければならない。このフラグが true のときはフロント側も
 // 管理画面を開けるようにし、そこで管理APIを叩いた時点で
 // requireArenaAdmin() が本人を最初の管理者として登録する。
+//
+// read スコープのAPIキー + X-Arena-Discord-Id でも呼べる。Discordボットが
+// 自分の discord_id が正しく users にマッピングされているかを確認する用途
+// （is_admin はあくまで解決先ユーザーの情報であり、APIキー自体に管理者権限を渡すものではない）。
 function arenaHandleMe(array $params, PDO $db): void {
-    $user = requireArenaUser();
+    $user = arenaActor($db, 'read');
     $adminCount = (int)$db->query('SELECT COUNT(*) FROM arena_admins')->fetchColumn();
     jsonResponse([
         'success'                   => true,

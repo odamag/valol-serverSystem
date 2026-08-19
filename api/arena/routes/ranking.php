@@ -1,10 +1,12 @@
 <?php
 // Phase 3: /v1/ranking, /v1/players/{user_id}, /v1/head-to-head ハンドラ。
-// これらは既存の /v1/games /v1/games/{slug}/entries と同じ「site」レベル扱いとし、
-// Phase 1/2 の前例（requireArenaUser() を呼ばない）に合わせて認証は必須にしない。
+// Phase 5 以降は arenaActor($db, 'read') を通す（セッション or read/write スコープの
+// APIキー必須）。Arena配下のフロントルートは元々すべてログイン必須のため、
+// ブラウザから見た挙動はこれまでと変わらない。
 
-// GET /v1/ranking?game={slug|overall} — リーダーボード
+// GET /v1/ranking?game={slug|overall} — リーダーボード（read スコープのAPIキーも可）
 function arenaHandleRanking(array $params, PDO $db): void {
+    arenaActor($db, 'read');
     $gameParam = trim((string)($_GET['game'] ?? 'overall'));
 
     if ($gameParam === '' || $gameParam === 'overall') {
@@ -48,8 +50,9 @@ function arenaHandleRanking(array $params, PDO $db): void {
     jsonResponse(['success' => true, 'game' => $gameMeta, 'ranking' => $rows]);
 }
 
-// GET /v1/players/{user_id} — 個人成績・レート一覧・直近試合
+// GET /v1/players/{user_id} — 個人成績・レート一覧・直近試合（read スコープのAPIキーも可）
 function arenaHandlePlayer(array $params, PDO $db): void {
+    arenaActor($db, 'read');
     $userId = (int)($params['id'] ?? 0);
 
     $stmt = $db->prepare('
@@ -91,6 +94,7 @@ function arenaHandlePlayer(array $params, PDO $db): void {
 
 // GET /v1/head-to-head?a={id}&b={id} — 対戦相手別の戦績（arena_matches から集計、専用テーブルは持たない）
 function arenaHandleHeadToHead(array $params, PDO $db): void {
+    arenaActor($db, 'read');
     $a = (int)($_GET['a'] ?? 0);
     $b = (int)($_GET['b'] ?? 0);
     if ($a <= 0 || $b <= 0 || $a === $b) {
