@@ -134,6 +134,116 @@ function arenaHandleGameEntries(array $params, PDO $db): void {
     jsonResponse(['success' => true, 'entries' => $entries]);
 }
 
+// GET /v1/games/{slug}/stats — ゲーム内エントリーごとのピック/バン数・勝率統計（Phase 6）。
+// ?user_id= を指定すると、「そのユーザーの側（A/B）で行われた」PICK/BANだけに絞り込む
+// （＝そのプレイヤーの得意/よく使うエントリーを見る用途）。
+//
+// 絞り込みは actor_id（実際にボタンを押した人）ではなく side→player_a_id/player_b_id の
+// 対応で行う。理由：ローカルモードでは作成者が両側を操作するため、actor_id で絞ると
+// 「相手の側のPICK」まで作成者自身の記録として数えてしまう。また、タイムアウトによる
+// 自動選択は actor_id が NULL になるため、actor_id基準だと自動選択されたPICKがその
+// プレイヤーの記録から漏れてしまう（＝自動選択で勝った試合の勝率が反映されない）。
+// side基準ならローカル/オンライン・手動/自動のいずれでも「その試合のその選手の持ち球」
+// として一貫して数えられる。
+// N+1 を避けるため、エントリーごとの集計は1本のグループ化SQLで行う。
+function arenaHandleGameStats(array $params, PDO $db): void {
+    arenaActor($db, 'read');
+    $slug = $params['slug'] ?? '';
+
+    $game = arenaFindGameBySlug($db, $slug);
+    if (!$game) {
+        jsonResponse(['success' => false, 'message' => 'ゲームが見つかりません'], 404);
+    }
+    $gameId = (int)$game['id'];
+
+    $userId = null;
+    if (isset($_GET['user_id']) && $_GET['user_id'] !== '') {
+        if (!is_numeric($_GET['user_id'])) {
+            jsonResponse(['success' => false, 'message' => 'user_id は数値で指定してください'], 400);
+        }
+        $userId = (int)$_GET['user_id'];
+    }
+
+    // ピック率・バン率の母数：このゲームで実際にドラフトが行われた試合数
+    // （waiting=相手待ちのみ・cancelled=中止 はドラフトが成立していないため除外）
+    $totalSql = "
+        SELECT COUNT(*) FROM arena_matches
+        WHERE game_id = ? AND status IN ('drafting', 'playing', 'reported', 'finished')
+    ";
+    $totalArgs = [$gameId];
+    if ($userId !== null) {
+        $totalSql .= ' AND (player_a_id = ? OR player_b_id = ?)';
+        $totalArgs[] = $userId;
+        $totalArgs[] = $userId;
+    }
+    $totalStmt = $db->prepare($totalSql);
+    $totalStmt->execute($totalArgs);
+    $totalMatches = (int)$totalStmt->fetchColumn();
+
+    // エントリーごとのピック数・バン数・（確定試合のみの）勝敗数を1本のSQLで集計する。
+    // action='ban' の行には side はあるが勝敗と無関係なので wins/losses の対象から外す。
+    $statsSql = "
+        SELECT
+            e.id AS entry_id, e.slug AS entry_slug, e.name AS entry_name, e.image_url AS entry_image_url,
+            SUM(CASE WHEN a.action = 'pick' THEN 1 ELSE 0 END) AS picks,
+            SUM(CASE WHEN a.action = 'ban' THEN 1 ELSE 0 END) AS bans,
+            SUM(CASE WHEN a.action = 'pick' AND m.status = 'finished' AND a.side = m.winner_side THEN 1 ELSE 0 END) AS wins,
+            SUM(CASE WHEN a.action = 'pick' AND m.status = 'finished' AND a.side != m.winner_side THEN 1 ELSE 0 END) AS losses
+        FROM arena_actions a
+        JOIN arena_matches m ON m.id = a.match_id
+        JOIN arena_entries e ON e.id = a.entry_id
+        WHERE m.game_id = ?
+    ";
+    $statsArgs = [$gameId];
+    if ($userId !== null) {
+        // 「そのユーザーの側で行われたPICK/BAN」に絞る（上のコメント参照）。
+        // タイムアウト自動選択（actor_id=NULL）もここでは除外されない＝正しくその
+        // プレイヤーの記録として数える。
+        $statsSql .= " AND ((a.side = 'A' AND m.player_a_id = ?) OR (a.side = 'B' AND m.player_b_id = ?))";
+        $statsArgs[] = $userId;
+        $statsArgs[] = $userId;
+    }
+    $statsSql .= ' GROUP BY e.id, e.slug, e.name, e.image_url ORDER BY picks DESC, bans DESC, e.name';
+
+    $statsStmt = $db->prepare($statsSql);
+    $statsStmt->execute($statsArgs);
+
+    $stats = array_map(function ($r) use ($totalMatches) {
+        $picks = (int)$r['picks'];
+        $bans = (int)$r['bans'];
+        $wins = (int)$r['wins'];
+        $losses = (int)$r['losses'];
+        $matchesCounted = $wins + $losses; // 勝率の分母（未確定試合を除いた実数）
+        return [
+            'entry_id'        => (int)$r['entry_id'],
+            'entry_slug'      => $r['entry_slug'],
+            'entry_name'      => $r['entry_name'],
+            'entry_image_url' => $r['entry_image_url'],
+            'picks'           => $picks,
+            'bans'            => $bans,
+            'wins'            => $wins,
+            'losses'          => $losses,
+            'matches_counted' => $matchesCounted,
+            'pick_rate'       => $totalMatches > 0 ? round($picks / $totalMatches, 4) : null,
+            'ban_rate'        => $totalMatches > 0 ? round($bans / $totalMatches, 4) : null,
+            'win_rate'        => $matchesCounted > 0 ? round($wins / $matchesCounted, 4) : null,
+        ];
+    }, $statsStmt->fetchAll());
+
+    jsonResponse([
+        'success'       => true,
+        'game'          => [
+            'slug'        => $game['slug'],
+            'name'        => $game['name'],
+            'entry_label' => $game['entry_label'],
+            'icon'        => $game['icon'],
+        ],
+        'user_id'       => $userId,
+        'total_matches' => $totalMatches,
+        'stats'         => $stats,
+    ]);
+}
+
 // GET /v1/me — 現在のユーザー + is_admin（フロントで管理者リンクの表示可否に使う）
 //
 // admin_bootstrap_available: arena_admins がまだ空かどうか。

@@ -72,8 +72,11 @@ function arenaCollectUsedEntryIds(array $actions): array {
 }
 
 // フィアレス（同一シリーズ内で使用済みのエントリーを再選択不可）で除外すべき entry_id 一覧。
-// Phase 3 では series_id は常に NULL 運用のため実質空配列を返すが、
-// 将来 series_id を使うときにそのまま効くように関数自体は用意しておく。
+// Phase 6: series_id が発行されるようになったため実際に効く。対象は「同一シリーズの
+// 別試合で PICK された（かつ実際にその試合が playing 以降まで進んだ = ドラフトが
+// 成立した）エントリー」のみ。BAN は持ち越さない。waiting/drafting/cancelled の試合は
+// 対象外（drafting 中の別試合は通常発生しないが、cancelled はやり直しなので除外しない
+// と正しい）。
 function arenaFearlessExcludedIds(PDO $db, array $match, array $ruleset): array {
     if (empty($ruleset['fearless']) || empty($match['series_id'])) {
         return [];
@@ -83,6 +86,7 @@ function arenaFearlessExcludedIds(PDO $db, array $match, array $ruleset): array 
         FROM arena_actions a
         JOIN arena_matches m ON m.id = a.match_id
         WHERE m.series_id = ? AND m.id != ? AND a.action = 'pick' AND a.entry_id IS NOT NULL
+          AND m.status IN ('playing', 'reported', 'finished')
     ");
     $stmt->execute([$match['series_id'], (int)$match['id']]);
     return array_map('intval', array_column($stmt->fetchAll(), 'entry_id'));

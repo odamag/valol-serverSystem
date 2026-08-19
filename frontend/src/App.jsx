@@ -18,6 +18,8 @@ import ArenaAdmin from './pages/ArenaAdmin.jsx'
 import ArenaDraft from './pages/ArenaDraft.jsx'
 import ArenaMatch from './pages/ArenaMatch.jsx'
 import ArenaRanking from './pages/ArenaRanking.jsx'
+import ArenaHeadToHead from './pages/ArenaHeadToHead.jsx'
+import ArenaStats from './pages/ArenaStats.jsx'
 
 export const AuthContext = createContext(null)
 
@@ -79,6 +81,14 @@ function App() {
               <Route
                 path="arena/ranking"
                 element={auth.loggedIn ? <ArenaRanking /> : <Navigate to="/login" replace />}
+              />
+              <Route
+                path="arena/head-to-head"
+                element={auth.loggedIn ? <ArenaHeadToHead /> : <Navigate to="/login" replace />}
+              />
+              <Route
+                path="arena/stats/:slug"
+                element={auth.loggedIn ? <ArenaStats /> : <Navigate to="/login" replace />}
               />
               <Route
                 path="arena/draft/:publicId"

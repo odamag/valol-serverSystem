@@ -26,6 +26,7 @@ export default function ArenaHome() {
   const [gamesLoading, setGamesLoading] = useState(false)
   const [gameSlug, setGameSlug] = useState('')
   const [rulesetSlug, setRulesetSlug] = useState('')
+  const [bestOf, setBestOf] = useState('1')
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState(null)
   const [createdRoom, setCreatedRoom] = useState(null) // オンライン作成直後: {public_id}
@@ -87,6 +88,7 @@ export default function ArenaHome() {
   }, [mode, opponentId])
 
   const selectedGame = commonGames.find(g => g.slug === gameSlug) || null
+  const selectedRuleset = selectedGame ? (selectedGame.rulesets.find(r => r.slug === rulesetSlug) || null) : null
 
   useEffect(() => {
     if (selectedGame) {
@@ -116,6 +118,7 @@ export default function ArenaHome() {
         game: gameSlug,
         ruleset: rulesetSlug,
         mode,
+        best_of: Number(bestOf),
         ...(opponentId ? { opponent_user_id: Number(opponentId) } : {}),
       })
       if (mode === 'online') {
@@ -270,7 +273,22 @@ export default function ArenaHome() {
                   {selectedGame && selectedGame.rulesets.map(r => <option key={r.slug} value={r.slug}>{r.name}</option>)}
                 </select>
               </div>
+
+              <div className="form-group">
+                <label className="form-label">対戦形式</label>
+                <select className="form-input" value={bestOf} onChange={e => setBestOf(e.target.value)}>
+                  <option value="1">単発（BO1）</option>
+                  <option value="3">2本先取（BO3）</option>
+                  <option value="5">3本先取（BO5）</option>
+                </select>
+              </div>
             </div>
+
+            {selectedRuleset && selectedRuleset.fearless && bestOf !== '1' && (
+              <p className="arena-panel-desc arena-fearless-hint">
+                🔥 フィアレスルールです。このシリーズで一度PICKされたエントリーは、次のゲーム以降は選べなくなります（BANは引き継ぎません）。
+              </p>
+            )}
 
             {mode === 'local' && opponentId && !gamesLoading && commonGames.length === 0 && (
               <p className="arena-empty">

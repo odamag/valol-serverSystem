@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import arenaApi, { ArenaApiError } from '../lib/arenaApi.js'
 
 function errMsg(e) {
@@ -7,6 +8,7 @@ function errMsg(e) {
 
 // ランキング（総合/ゲーム別）とヘッドトゥヘッド。
 export default function ArenaRanking() {
+  const navigate = useNavigate()
   const [games, setGames] = useState([])
   const [selectedGame, setSelectedGame] = useState('overall')
   const [ranking, setRanking] = useState([])
@@ -60,6 +62,11 @@ export default function ArenaRanking() {
     return u ? u.username : `#${id}`
   }
 
+  // ランキング上の行から、そのプレイヤーを A 側に固定してヘッドトゥヘッド詳細ページを開く
+  function openHeadToHead(userId) {
+    navigate(`/arena/head-to-head?a=${userId}`)
+  }
+
   return (
     <>
       <div className="page-header">
@@ -88,6 +95,12 @@ export default function ArenaRanking() {
           ))}
         </div>
 
+        {selectedGame !== 'overall' && (
+          <p className="arena-stats-link-row">
+            <Link to={`/arena/stats/${selectedGame}`}>📊 このゲームのキャラ別統計を見る</Link>
+          </p>
+        )}
+
         {loading && <p className="arena-loading">読み込み中…</p>}
         {error && <p className="arena-msg arena-msg--err">{error}</p>}
 
@@ -110,7 +123,11 @@ export default function ArenaRanking() {
                   {ranking.map(r => (
                     <tr key={r.user_id}>
                       <td>{r.rank}</td>
-                      <td>{r.username}</td>
+                      <td>
+                        <button type="button" className="arena-ranking-name-btn" onClick={() => openHeadToHead(r.user_id)}>
+                          {r.username}
+                        </button>
+                      </td>
                       <td>{r.rating}</td>
                       <td>{r.wins}勝{r.losses}敗</td>
                       <td>{r.streak > 0 ? `${r.streak}連勝` : r.streak < 0 ? `${-r.streak}連敗` : '-'}</td>
@@ -141,7 +158,9 @@ export default function ArenaRanking() {
         {h2hResult && (
           <p className="arena-h2h-result">
             {usernameOf(h2hResult.a)} {h2hResult.a_wins} - {h2hResult.b_wins} {usernameOf(h2hResult.b)}
-            {' '}（全 {h2hResult.matches.length} 戦）
+            {' '}（全 {h2hResult.total} 戦）
+            {' '}
+            <Link to={`/arena/head-to-head?a=${h2hA}&b=${h2hB}`}>詳細を見る（ゲーム別内訳・連勝連敗・PICK履歴）</Link>
           </p>
         )}
       </div>

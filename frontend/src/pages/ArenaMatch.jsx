@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import arenaApi, { ArenaApiError } from '../lib/arenaApi.js'
 import { useAuth } from '../App.jsx'
 
@@ -19,11 +19,13 @@ function errMsg(e) {
 // 試合詳細：ドラフトへの導線、結果申告、相手による承認、レート増減の表示。
 export default function ArenaMatch() {
   const { publicId } = useParams()
+  const navigate = useNavigate()
   const { auth } = useAuth()
   const [match, setMatch] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [nextGameError, setNextGameError] = useState(null)
 
   const [winner, setWinner] = useState('A')
   const [scoreA, setScoreA] = useState('0')
@@ -70,6 +72,20 @@ export default function ArenaMatch() {
       setMatch(data.match)
     } catch (e) {
       setError(errMsg(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleStartNextGame() {
+    if (!match || !match.series_id) return
+    setBusy(true)
+    setNextGameError(null)
+    try {
+      const data = await arenaApi.post('/v1/matches', { series_id: match.series_id })
+      navigate(`/arena/draft/${data.match.public_id}`)
+    } catch (e) {
+      setNextGameError(errMsg(e))
     } finally {
       setBusy(false)
     }
@@ -132,6 +148,33 @@ export default function ArenaMatch() {
                 {Math.round(myDelta.rating_after - myDelta.rating_before)}）
               </p>
             )}
+          </div>
+        )}
+
+        {match.series && (
+          <div className="arena-series-box">
+            <p className="arena-panel-subtitle">
+              🔥 シリーズ戦績（BO{match.series.best_of}・{match.series.wins_needed}本先取）
+            </p>
+            <p className="arena-series-score">
+              {match.series.player_a_name} <strong>{match.series.wins_a}</strong>
+              {' - '}
+              <strong>{match.series.wins_b}</strong> {match.series.player_b_name}
+            </p>
+            {match.series.is_over ? (
+              <p className="arena-msg">
+                このシリーズは決着しました（{match.series.wins_a > match.series.wins_b ? match.series.player_a_name : match.series.player_b_name} の勝利）。
+              </p>
+            ) : (
+              match.status === 'finished' && (
+                <div className="arena-form-actions">
+                  <button className="btn btn-primary arena-inline-btn" disabled={busy} onClick={handleStartNextGame}>
+                    次のゲームを開始する（{match.series.games_finished + 1}試合目）
+                  </button>
+                </div>
+              )
+            )}
+            {nextGameError && <p className="arena-msg arena-msg--err">{nextGameError}</p>}
           </div>
         )}
 

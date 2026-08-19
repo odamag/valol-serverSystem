@@ -2459,3 +2459,92 @@ body {
   .arena-join-form { flex-direction: column; align-items: stretch; }
   .arena-join-form .btn { width: 100%; }
 }
+
+/* ── Arena Phase 6（フィアレス/BO3シリーズ・ヘッドトゥヘッド詳細・キャラ別統計） ── */
+
+/* BO3/BO5 選択時のフィアレス注意書き */
+.arena-fearless-hint {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  color: var(--warning);
+  font-size: 0.82rem;
+}
+
+/* シリーズ戦績ボックス（試合詳細・ドラフト画面共通） */
+.arena-series-box {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--card-border);
+}
+.arena-series-score {
+  font-size: 1.15rem;
+  margin: 6px 0 10px;
+}
+.arena-series-inline-badge {
+  margin-left: 10px;
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--warning);
+}
+
+/* ランキング行からヘッドトゥヘッドへ飛ぶボタン（見た目はリンクっぽく） */
+.arena-ranking-name-btn {
+  background: none;
+  border: none;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline dotted;
+}
+.arena-ranking-name-btn:hover { color: var(--accent); }
+
+/* ゲーム別統計へのリンク行 */
+.arena-stats-link-row { margin: -4px 0 14px; font-size: 0.85rem; }
+.arena-stats-link-row a { color: var(--accent); text-decoration: none; }
+.arena-stats-link-row a:hover { text-decoration: underline; }
+
+/* 統計テーブル：ソート可能なヘッダ */
+.arena-stats-sort-th { cursor: pointer; user-select: none; white-space: nowrap; }
+.arena-stats-sort-th:hover { color: var(--text); }
+.arena-stats-entry-cell { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.arena-stats-entry-img {
+  width: 26px; height: 26px; border-radius: 6px; object-fit: cover;
+  border: 1px solid var(--card-border);
+}
+
+/* ヘッドトゥヘッド詳細ページ */
+.arena-h2h-result--big { font-size: 1.2rem; margin-top: 10px; }
+.arena-h2h-match-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.arena-h2h-match-item {
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+.arena-h2h-match-head {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  font-size: 0.85rem; margin-bottom: 8px;
+}
+.arena-h2h-win  { color: var(--success); font-weight: 600; }
+.arena-h2h-loss { color: var(--text-muted); }
+.arena-h2h-match-date { color: var(--text-muted); font-size: 0.78rem; margin-left: auto; }
+.arena-h2h-picks { display: flex; flex-direction: column; gap: 4px; font-size: 0.82rem; }
+.arena-h2h-picks-label { color: var(--text-muted); margin-right: 6px; }
+.arena-empty-inline { color: var(--text-muted); }
+
+.arena-pick-chip, .arena-ban-chip {
+  display: inline-block;
+  border-radius: 12px;
+  padding: 2px 9px;
+  margin: 2px 4px 2px 0;
+  font-size: 0.78rem;
+}
+.arena-pick-chip { background: rgba(59, 130, 246, 0.12); color: #60a5fa; }
+.arena-ban-chip  { background: rgba(239, 68, 68, 0.12);  color: #f87171; text-decoration: line-through; }
+
+@media (max-width: 600px) {
+  .arena-h2h-match-head { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .arena-h2h-match-date { margin-left: 0; }
+  .arena-table-wrap .arena-stats-table { font-size: 0.8rem; }
+}

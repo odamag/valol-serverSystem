@@ -43,6 +43,7 @@ $routes = [
     ['GET', '#^/v1/users$#',                      'arenaHandleUsers'],
     ['GET', '#^/v1/games$#',                       'arenaHandleGames'],
     ['GET', '#^/v1/games/(?P<slug>[a-z0-9_-]+)/entries$#', 'arenaHandleGameEntries'],
+    ['GET', '#^/v1/games/(?P<slug>[a-z0-9_-]+)/stats$#',   'arenaHandleGameStats'],
     ['GET', '#^/v1/me$#',                          'arenaHandleMe'],
 
     // 所持ゲーム
@@ -59,6 +60,9 @@ $routes = [
     ['POST', '#^/v1/matches/(?P<public_id>[a-f0-9]{8})/result$#',     'arenaHandleMatchResult'],
     ['POST', '#^/v1/matches/(?P<public_id>[a-f0-9]{8})/confirm$#',    'arenaHandleMatchConfirm'],
     ['POST', '#^/v1/matches/(?P<public_id>[a-f0-9]{8})/cancel$#',     'arenaHandleMatchCancel'],
+
+    // フィアレス／BO3 シリーズ
+    ['GET', '#^/v1/series/(?P<series_id>[a-f0-9]{8})$#',              'arenaHandleSeriesGet'],
 
     // ランキング
     ['GET', '#^/v1/ranking$#',                       'arenaHandleRanking'],

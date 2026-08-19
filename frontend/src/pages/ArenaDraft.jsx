@@ -169,7 +169,14 @@ export default function ArenaDraft() {
     <>
       <div className="page-header">
         <h1 className="page-title">{match.game && match.game.icon} {match.game && match.game.name} — ドラフト</h1>
-        <p className="page-subtitle">{match.player_a_name} vs {match.player_b_name}（{isOnline ? 'オンライン対戦' : 'ローカル対戦'}）</p>
+        <p className="page-subtitle">
+          {match.player_a_name} vs {match.player_b_name}（{isOnline ? 'オンライン対戦' : 'ローカル対戦'}）
+          {match.series && (
+            <span className="arena-badge arena-badge--muted arena-series-inline-badge">
+              🔥 BO{match.series.best_of} {match.series.wins_a}-{match.series.wins_b}（{match.series.games_finished + 1}試合目）
+            </span>
+          )}
+        </p>
       </div>
 
       <div className="card arena-card">
