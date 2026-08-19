@@ -59,19 +59,22 @@ function arenaSeedOneFile(PDO $db, string $file): void {
     $db->beginTransaction();
     try {
         $gameStmt = $db->prepare('
-            INSERT INTO arena_games (slug, name, icon, sort_order, source, enabled, created_at, updated_at)
-            VALUES (?, ?, ?, ?, \'seed\', 1, ?, ?)
+            INSERT INTO arena_games (slug, name, icon, sort_order, source, enabled, is_default, created_at, updated_at)
+            VALUES (?, ?, ?, ?, \'seed\', 1, ?, ?, ?)
             ON CONFLICT(slug) DO NOTHING
         ');
         foreach (($json['games'] ?? []) as $game) {
             if (empty($game['slug']) || empty($game['name'])) {
                 continue;
             }
+            // is_default 未指定のシードタイトルは既定プールに入れる
+            // （初期の9タイトルがそのままシリーズ作成の初期選択になる）
             $gameStmt->execute([
                 (string)$game['slug'],
                 (string)$game['name'],
                 (string)($game['icon'] ?? ''),
                 (int)($game['sort_order'] ?? 0),
+                array_key_exists('is_default', $game) ? (!empty($game['is_default']) ? 1 : 0) : 1,
                 $now,
                 $now,
             ]);

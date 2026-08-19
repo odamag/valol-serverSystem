@@ -22,6 +22,9 @@ function GamesPanel() {
   const [editForm, setEditForm] = useState(EMPTY_GAME)
   const [editBusy, setEditBusy] = useState(false)
 
+  // 一覧の絞り込み。既定は「有効のみ」（普段いじるのは有効なタイトルなので）
+  const [showDisabled, setShowDisabled] = useState(false)
+
   // 無効なタイトルも編集・再有効化したいので、管理画面では全件取得する
   const load = useCallback(async () => {
     try {
@@ -32,6 +35,8 @@ function GamesPanel() {
   useEffect(() => { load() }, [load])
 
   const enabledCount = games.filter(g => g.enabled).length
+  const defaultCount = games.filter(g => g.enabled && g.is_default).length
+  const visible = showDisabled ? games : games.filter(g => g.enabled)
 
   async function create(e) {
     e.preventDefault()
@@ -68,6 +73,12 @@ function GamesPanel() {
     } catch (e) { setError(errMsg(e)) } finally { setEditBusy(false) }
   }
 
+  async function setDefault(g, isDefault) {
+    setError(null)
+    try { await arenaApi.patch(`/v1/admin/games/${g.slug}`, { is_default: isDefault }); await load() }
+    catch (e) { setError(errMsg(e)) }
+  }
+
   async function setEnabled(g, enabled) {
     if (!enabled && !window.confirm(`${g.name} を無効にしますか？（対戦履歴は残ります）`)) return
     setError(null)
@@ -82,6 +93,10 @@ function GamesPanel() {
         BAN/PICK の対象になるタイトルです。シリーズを始めるには
         <strong>有効なタイトルが書式の pool_size（既定 9）ぶん</strong>必要です。
         現在 有効 {enabledCount} 件 / 全 {games.length} 件。
+      </p>
+      <p className="arena-muted">
+        <strong>デフォルト</strong>に設定したタイトルは、シリーズ作成時に最初から選択された状態になります。
+        現在 {defaultCount} 件（書式の pool_size とそろえておくと、そのまま作成できます）。
       </p>
       {error && <p className="arena-error">{error}</p>}
 
@@ -107,9 +122,22 @@ function GamesPanel() {
         <button className="btn btn-primary" disabled={busy || !form.name}>追加</button>
       </form>
 
-      <h3 className="arena-subsection-title">登録済みのタイトル</h3>
+      <div className="arena-list-head">
+        <h3 className="arena-subsection-title">登録済みのタイトル</h3>
+        <label className="arena-filter-toggle">
+          <input
+            type="checkbox"
+            checked={!showDisabled}
+            onChange={e => setShowDisabled(!e.target.checked)}
+          />
+          <span>有効のみ表示</span>
+        </label>
+      </div>
       <ul className="arena-admin-list">
-        {games.map(g => (
+        {visible.length === 0 && (
+          <li><span className="arena-muted">表示できるタイトルがありません。</span></li>
+        )}
+        {visible.map(g => (
           <li key={g.id} className={g.enabled ? '' : 'arena-admin-item--disabled'}>
             {editingId === g.id ? (
               <form className="arena-edit-form" onSubmit={e => saveEdit(e, g)}>
@@ -151,9 +179,16 @@ function GamesPanel() {
                 <span>
                   {g.icon || '🎮'} <strong>{g.name}</strong>{' '}
                   <span className="arena-muted">{g.slug}</span>
+                  {g.is_default && <span className="arena-badge">デフォルト</span>}
                   {!g.enabled && <span className="arena-badge arena-badge--muted">無効</span>}
                 </span>
                 <span className="arena-admin-actions">
+                  <button
+                    className={g.is_default ? 'btn btn-secondary' : 'btn btn-secondary'}
+                    onClick={() => setDefault(g, !g.is_default)}
+                  >
+                    {g.is_default ? 'デフォルト解除' : 'デフォルトにする'}
+                  </button>
                   <button className="btn btn-secondary" onClick={() => startEdit(g)}>編集</button>
                   {g.enabled
                     ? <button className="btn btn-danger" onClick={() => setEnabled(g, false)}>無効化</button>
@@ -210,6 +245,13 @@ function FormatsPanel() {
     catch (e) { setError(errMsg(e)) }
   }
 
+  // 既定の書式はシリーズ作成画面で最初に選ばれる。サーバー側で常に1つだけになる。
+  async function makeDefault(id) {
+    setError(null)
+    try { await arenaApi.patch(`/v1/admin/formats/${id}`, { is_default: true }); await load() }
+    catch (e) { setError(errMsg(e)) }
+  }
+
   return (
     <div className="card arena-card">
       <h2 className="arena-section-title">📋 ドラフト書式</h2>
@@ -255,9 +297,15 @@ function FormatsPanel() {
             <span>
               <strong>{f.name}</strong> <span className="arena-muted">{f.slug}</span>
               <span className="arena-muted"> / {f.pool_size}タイトル / {f.wins_needed}先取</span>
+              {f.is_default && <span className="arena-badge">デフォルト</span>}
               {!f.enabled && <span className="arena-badge arena-badge--muted">無効</span>}
             </span>
-            <button className="btn btn-danger" onClick={() => disable(f.id)}>無効化</button>
+            <span className="arena-admin-actions">
+              {!f.is_default && f.enabled && (
+                <button className="btn btn-secondary" onClick={() => makeDefault(f.id)}>デフォルトにする</button>
+              )}
+              <button className="btn btn-danger" onClick={() => disable(f.id)}>無効化</button>
+            </span>
           </li>
         ))}
       </ul>
