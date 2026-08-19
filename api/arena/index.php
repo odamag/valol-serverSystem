@@ -73,6 +73,7 @@ $routes = [
     ['GET', '#^/v1/title-stats$#',                   'arenaHandleTitleStats'],
 
     // ゲームマスタ / フォーマット管理（管理者のみ。各ハンドラ内で requireArenaAdmin() を呼ぶ）
+    ['GET',    '#^/v1/admin/games$#',                         'arenaHandleAdminGamesList'],
     ['POST',   '#^/v1/admin/games$#',                         'arenaHandleAdminGameCreate'],
     ['PATCH',  '#^/v1/admin/games/(?P<slug>[a-z0-9_-]+)$#',   'arenaHandleAdminGameUpdate'],
     ['DELETE', '#^/v1/admin/games/(?P<slug>[a-z0-9_-]+)$#',   'arenaHandleAdminGameDelete'],

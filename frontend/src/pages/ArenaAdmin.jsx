@@ -17,13 +17,21 @@ function GamesPanel() {
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
 
+  // 編集中の行。null なら誰も編集していない。
+  const [editingId, setEditingId] = useState(null)
+  const [editForm, setEditForm] = useState(EMPTY_GAME)
+  const [editBusy, setEditBusy] = useState(false)
+
+  // 無効なタイトルも編集・再有効化したいので、管理画面では全件取得する
   const load = useCallback(async () => {
     try {
-      const d = await arenaApi.get('/v1/games')
+      const d = await arenaApi.get('/v1/admin/games')
       setGames(d.games || [])
     } catch (e) { setError(errMsg(e)) }
   }, [])
   useEffect(() => { load() }, [load])
+
+  const enabledCount = games.filter(g => g.enabled).length
 
   async function create(e) {
     e.preventDefault()
@@ -37,9 +45,33 @@ function GamesPanel() {
     } catch (e) { setError(errMsg(e)) } finally { setBusy(false) }
   }
 
-  async function disable(slug) {
-    if (!window.confirm(`${slug} を無効にしますか？（履歴は残ります）`)) return
-    try { await arenaApi.del(`/v1/admin/games/${slug}`); await load() }
+  function startEdit(g) {
+    setEditingId(g.id)
+    setEditForm({ slug: g.slug, name: g.name, icon: g.icon || '', sort_order: g.sort_order })
+    setError(null)
+  }
+
+  async function saveEdit(e, original) {
+    e.preventDefault()
+    setEditBusy(true); setError(null)
+    try {
+      // slug は URL に使うので、変更されたときだけ送る（無変更なら触らない）
+      const body = {
+        name: editForm.name,
+        icon: editForm.icon,
+        sort_order: Number(editForm.sort_order) || 0,
+      }
+      if (editForm.slug && editForm.slug !== original.slug) body.slug = editForm.slug
+      await arenaApi.patch(`/v1/admin/games/${original.slug}`, body)
+      setEditingId(null)
+      await load()
+    } catch (e) { setError(errMsg(e)) } finally { setEditBusy(false) }
+  }
+
+  async function setEnabled(g, enabled) {
+    if (!enabled && !window.confirm(`${g.name} を無効にしますか？（対戦履歴は残ります）`)) return
+    setError(null)
+    try { await arenaApi.patch(`/v1/admin/games/${g.slug}`, { enabled }); await load() }
     catch (e) { setError(errMsg(e)) }
   }
 
@@ -47,10 +79,13 @@ function GamesPanel() {
     <div className="card arena-card">
       <h2 className="arena-section-title">🎮 ゲームタイトル</h2>
       <p className="arena-muted">
-        BAN/PICK の対象になるタイトルです。書式の pool_size（既定 9）ぶん必要です。現在 {games.length} 件。
+        BAN/PICK の対象になるタイトルです。シリーズを始めるには
+        <strong>有効なタイトルが書式の pool_size（既定 9）ぶん</strong>必要です。
+        現在 有効 {enabledCount} 件 / 全 {games.length} 件。
       </p>
       {error && <p className="arena-error">{error}</p>}
 
+      <h3 className="arena-subsection-title">タイトルを追加</h3>
       <form className="arena-form-grid" onSubmit={create}>
         <label className="arena-field">
           <span>タイトル名</span>
@@ -72,11 +107,60 @@ function GamesPanel() {
         <button className="btn btn-primary" disabled={busy || !form.name}>追加</button>
       </form>
 
+      <h3 className="arena-subsection-title">登録済みのタイトル</h3>
       <ul className="arena-admin-list">
         {games.map(g => (
-          <li key={g.id}>
-            <span>{g.icon || '🎮'} <strong>{g.name}</strong> <span className="arena-muted">{g.slug}</span></span>
-            <button className="btn btn-danger" onClick={() => disable(g.slug)}>無効化</button>
+          <li key={g.id} className={g.enabled ? '' : 'arena-admin-item--disabled'}>
+            {editingId === g.id ? (
+              <form className="arena-edit-form" onSubmit={e => saveEdit(e, g)}>
+                <input
+                  className="arena-edit-icon"
+                  value={editForm.icon}
+                  onChange={e => setEditForm(f => ({ ...f, icon: e.target.value }))}
+                  maxLength={4}
+                  placeholder="🎮"
+                  aria-label="アイコン"
+                />
+                <input
+                  className="arena-edit-name"
+                  value={editForm.name}
+                  onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                  required
+                  aria-label="タイトル名"
+                />
+                <input
+                  className="arena-edit-slug"
+                  value={editForm.slug}
+                  onChange={e => setEditForm(f => ({ ...f, slug: e.target.value }))}
+                  aria-label="スラッグ"
+                />
+                <input
+                  className="arena-edit-order"
+                  type="number"
+                  value={editForm.sort_order}
+                  onChange={e => setEditForm(f => ({ ...f, sort_order: e.target.value }))}
+                  aria-label="並び順"
+                />
+                <button className="btn btn-primary" disabled={editBusy || !editForm.name}>保存</button>
+                <button type="button" className="btn btn-secondary" onClick={() => setEditingId(null)}>
+                  やめる
+                </button>
+              </form>
+            ) : (
+              <>
+                <span>
+                  {g.icon || '🎮'} <strong>{g.name}</strong>{' '}
+                  <span className="arena-muted">{g.slug}</span>
+                  {!g.enabled && <span className="arena-badge arena-badge--muted">無効</span>}
+                </span>
+                <span className="arena-admin-actions">
+                  <button className="btn btn-secondary" onClick={() => startEdit(g)}>編集</button>
+                  {g.enabled
+                    ? <button className="btn btn-danger" onClick={() => setEnabled(g, false)}>無効化</button>
+                    : <button className="btn btn-secondary" onClick={() => setEnabled(g, true)}>有効化</button>}
+                </span>
+              </>
+            )}
           </li>
         ))}
       </ul>

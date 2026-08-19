@@ -94,6 +94,26 @@ function arenaFindFormatById(PDO $db, int $id): ?array {
 
 // ── ゲーム（タイトルマスタ） ─────────────────────────────────────
 
+// GET /v1/admin/games — 管理用のタイトル一覧。
+// 公開用の /v1/games と違い、無効（enabled=0）のタイトルも返す。
+// 管理画面から編集・再有効化できるようにするため。
+function arenaHandleAdminGamesList(array $params, PDO $db): void {
+    requireArenaAdmin($db);
+    $stmt = $db->query('SELECT * FROM arena_games ORDER BY sort_order, name');
+    $games = array_map(function ($g) {
+        return [
+            'id'         => (int)$g['id'],
+            'slug'       => $g['slug'],
+            'name'       => $g['name'],
+            'icon'       => $g['icon'],
+            'sort_order' => (int)$g['sort_order'],
+            'enabled'    => (bool)$g['enabled'],
+            'source'     => $g['source'],
+        ];
+    }, $stmt->fetchAll());
+    jsonResponse(['success' => true, 'games' => $games]);
+}
+
 // POST /v1/admin/games
 function arenaHandleAdminGameCreate(array $params, PDO $db): void {
     $admin = requireArenaAdmin($db);
