@@ -3,14 +3,24 @@
 // セクション12の再設計により、ゲームは「タイトルそのもの」になったため
 // entries/rulesets（旧 /v1/games/{slug}/entries, /v1/games/{slug}/stats）は廃止。
 
-// GET /v1/users — 対戦相手を選ぶためのユーザー一覧（ログイン必須。read スコープのAPIキーも可）
+// GET /v1/users — ユーザー一覧（ログイン必須。read スコープのAPIキーも可）
+//
+// 既定では自分自身を除外する（対戦相手を選ぶ用途が主なため。自分とは対戦できない）。
+// ?include_self=1 を付けると自分も含める。ヘッドトゥヘッドのように
+// 「自分 対 誰か」を選ぶ画面で必要になる。
 function arenaHandleUsers(array $params, PDO $db): void {
     $user = arenaActor($db, 'read');
+    $includeSelf = !empty($_GET['include_self']);
 
     try {
         $authDb = getDB();
-        $stmt = $authDb->prepare('SELECT id, username FROM users WHERE id != ? ORDER BY username');
-        $stmt->execute([$user['id']]);
+        if ($includeSelf) {
+            $stmt = $authDb->prepare('SELECT id, username FROM users ORDER BY username');
+            $stmt->execute();
+        } else {
+            $stmt = $authDb->prepare('SELECT id, username FROM users WHERE id != ? ORDER BY username');
+            $stmt->execute([$user['id']]);
+        }
         $rows = $stmt->fetchAll();
     } catch (PDOException $e) {
         // users テーブルが未作成の環境でも 500 にせず空配列を返す

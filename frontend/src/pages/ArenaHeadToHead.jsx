@@ -18,12 +18,30 @@ export default function ArenaHeadToHead() {
   const b = searchParams.get('b') || ''
 
   const [users, setUsers] = useState([])
+  const [meId, setMeId] = useState(null)
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
+  // include_self=1 … この画面は「自分 対 誰か」を見るのが主用途なので自分も選べる必要がある。
+  // 併せて、片方が未選択なら自分を初期値にする。
   useEffect(() => {
-    arenaApi.get('/v1/users').then(data => setUsers(data.users)).catch(() => {})
+    Promise.all([
+      arenaApi.get('/v1/users?include_self=1'),
+      arenaApi.get('/v1/me'),
+    ])
+      .then(([u, me]) => {
+        setUsers(u.users || [])
+        setMeId(me.id)
+        if (!searchParams.get('a')) {
+          const next = new URLSearchParams(searchParams)
+          next.set('a', String(me.id))
+          setSearchParams(next, { replace: true })
+        }
+      })
+      .catch(() => {})
+    // 初回のみ。以後の選択変更でURLを上書きしないようにする。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const load = useCallback(async () => {
@@ -75,12 +93,20 @@ export default function ArenaHeadToHead() {
         <div className="arena-h2h-form">
           <select className="form-input" value={a} onChange={e => handleSelect('a', e.target.value)}>
             <option value="">プレイヤーA</option>
-            {users.map(u => <option key={u.id} value={u.id}>{u.username}</option>)}
+            {users.map(u => (
+              <option key={u.id} value={u.id} disabled={String(u.id) === String(b)}>
+                {u.username}{String(u.id) === String(meId) ? '（自分）' : ''}
+              </option>
+            ))}
           </select>
           <span>vs</span>
           <select className="form-input" value={b} onChange={e => handleSelect('b', e.target.value)}>
             <option value="">プレイヤーB</option>
-            {users.map(u => <option key={u.id} value={u.id}>{u.username}</option>)}
+            {users.map(u => (
+              <option key={u.id} value={u.id} disabled={String(u.id) === String(a)}>
+                {u.username}{String(u.id) === String(meId) ? '（自分）' : ''}
+              </option>
+            ))}
           </select>
         </div>
 
