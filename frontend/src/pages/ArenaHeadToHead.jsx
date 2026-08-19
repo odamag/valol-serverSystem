@@ -99,21 +99,21 @@ export default function ArenaHeadToHead() {
         )}
       </div>
 
-      {result && result.per_game.length > 0 && (
+      {result && result.per_title.length > 0 && (
         <div className="card arena-card">
-          <p className="arena-panel-title">ゲーム別内訳</p>
+          <p className="arena-panel-title">タイトル別内訳（試合単位）</p>
           <div className="arena-table-wrap">
-            <table className="arena-ranking-table">
+            <table className="arena-table">
               <thead>
                 <tr>
-                  <th>ゲーム</th>
+                  <th>タイトル</th>
                   <th>{usernameOf(result.a)}</th>
                   <th>{usernameOf(result.b)}</th>
-                  <th>対戦数</th>
+                  <th>試合数</th>
                 </tr>
               </thead>
               <tbody>
-                {result.per_game.map(g => (
+                {result.per_title.map(g => (
                   <tr key={g.game_slug}>
                     <td>{g.game_icon || '🎮'} {g.game_name}</td>
                     <td>{g.a_wins}</td>
@@ -129,45 +129,41 @@ export default function ArenaHeadToHead() {
 
       {result && (
         <div className="card arena-card">
-          <p className="arena-panel-title">直近の対戦（BAN/PICK内訳）</p>
-          {result.matches.length === 0 ? (
+          <p className="arena-panel-title">直近のシリーズ（5番勝負の内訳）</p>
+          {result.series.length === 0 ? (
             <p className="arena-empty">まだ対戦記録がありません</p>
           ) : (
             <ul className="arena-h2h-match-list">
-              {result.matches.map(m => (
-                <li key={m.public_id} className="arena-h2h-match-item">
-                  <div className="arena-h2h-match-head">
-                    <span>{m.game_icon || '🎮'} {m.game_name}</span>
-                    <span className={m.a_won ? 'arena-h2h-win' : 'arena-h2h-loss'}>
-                      {usernameOf(m.a_won ? result.a : result.b)} の勝ち（{m.score_a} - {m.score_b}）
-                    </span>
-                    <span className="arena-h2h-match-date">{fmtDate(m.finished_at)}</span>
-                    {m.series_id && <span className="arena-badge arena-badge--muted">シリーズ戦</span>}
-                  </div>
-                  <div className="arena-h2h-picks">
-                    <div>
-                      <span className="arena-h2h-picks-label">{usernameOf(result.a)}のPICK:</span>
-                      {m.a_picks.length === 0 ? <span className="arena-empty-inline">-</span> : m.a_picks.map(p => (
-                        <span key={p.entry_id} className="arena-pick-chip">{p.name}</span>
-                      ))}
+              {result.series.map(sr => {
+                const aIsSideA = sr.side_a_user_id === result.a
+                const aScore = aIsSideA ? sr.wins_a : sr.wins_b
+                const bScore = aIsSideA ? sr.wins_b : sr.wins_a
+                const aWon = sr.winner_id === result.a
+                return (
+                  <li key={sr.public_id} className="arena-h2h-match-item">
+                    <div className="arena-h2h-match-head">
+                      <span className={aWon ? 'arena-h2h-win' : 'arena-h2h-loss'}>
+                        {usernameOf(aWon ? result.a : result.b)} の勝ち（{aScore} - {bScore}）
+                      </span>
+                      <span className="arena-h2h-match-date">{fmtDate(sr.finished_at)}</span>
                     </div>
-                    <div>
-                      <span className="arena-h2h-picks-label">{usernameOf(result.b)}のPICK:</span>
-                      {m.b_picks.length === 0 ? <span className="arena-empty-inline">-</span> : m.b_picks.map(p => (
-                        <span key={p.entry_id} className="arena-pick-chip">{p.name}</span>
+                    <ol className="arena-h2h-games">
+                      {sr.games.map(g => (
+                        <li key={g.game_no}>
+                          <span className="arena-lineup-no">第{g.game_no}</span>
+                          <span>{g.game_icon || '🎮'} {g.game_name}</span>
+                          {g.is_decider
+                            ? <span className="arena-lineup-tag arena-lineup-tag--decider">Decider</span>
+                            : <span className="arena-lineup-tag">PICK {g.picked_by}</span>}
+                          <span className="arena-muted">
+                            {g.winner_id === null ? '未実施' : `${usernameOf(g.winner_id)} の勝ち`}
+                          </span>
+                        </li>
                       ))}
-                    </div>
-                    {m.bans.length > 0 && (
-                      <div>
-                        <span className="arena-h2h-picks-label">BAN:</span>
-                        {m.bans.map((p, i) => (
-                          <span key={p.entry_id + '-' + i} className="arena-ban-chip">{p.name}</span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </li>
-              ))}
+                    </ol>
+                  </li>
+                )
+              })}
             </ul>
           )}
         </div>

@@ -1,169 +1,123 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import arenaApi, { ArenaApiError } from '../lib/arenaApi.js'
 
 function errMsg(e) {
   return e instanceof ArenaApiError ? e.message : '通信エラーが発生しました'
 }
 
-// ランキング（総合/ゲーム別）とヘッドトゥヘッド。
-export default function ArenaRanking() {
-  const navigate = useNavigate()
-  const [games, setGames] = useState([])
-  const [selectedGame, setSelectedGame] = useState('overall')
-  const [ranking, setRanking] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+function pct(v) {
+  return v === null || v === undefined ? '—' : `${Math.round(v * 100)}%`
+}
 
-  const [users, setUsers] = useState([])
-  const [h2hA, setH2hA] = useState('')
-  const [h2hB, setH2hB] = useState('')
-  const [h2hResult, setH2hResult] = useState(null)
-  const [h2hError, setH2hError] = useState(null)
+export default function ArenaRanking() {
+  const [games, setGames] = useState([])
+  // scope は 'overall' | 'series' | タイトルの slug
+  const [scope, setScope] = useState('overall')
+  const [ranking, setRanking] = useState([])
+  const [stats, setStats] = useState(null)
+  const [error, setError] = useState(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    arenaApi.get('/v1/games').then(data => setGames(data.games)).catch(() => {})
-    arenaApi.get('/v1/users').then(data => setUsers(data.users)).catch(() => {})
+    arenaApi.get('/v1/games')
+      .then(d => setGames(d.games || []))
+      .catch(e => setError(errMsg(e)))
   }, [])
 
-  const loadRanking = useCallback(async (gameSlug) => {
+  useEffect(() => {
     setLoading(true)
-    setError(null)
-    try {
-      const data = await arenaApi.get(`/v1/ranking?game=${encodeURIComponent(gameSlug)}`)
-      setRanking(data.ranking)
-    } catch (e) {
-      setError(errMsg(e))
-    } finally {
-      setLoading(false)
-    }
+    arenaApi.get(`/v1/ranking?game=${encodeURIComponent(scope)}`)
+      .then(d => { setRanking(d.ranking || []); setError(null) })
+      .catch(e => setError(errMsg(e)))
+      .finally(() => setLoading(false))
+  }, [scope])
+
+  useEffect(() => {
+    arenaApi.get('/v1/title-stats')
+      .then(setStats)
+      .catch(() => setStats(null))
   }, [])
-
-  useEffect(() => { loadRanking(selectedGame) }, [selectedGame, loadRanking])
-
-  async function handleH2h(e) {
-    e.preventDefault()
-    setH2hError(null)
-    setH2hResult(null)
-    if (!h2hA || !h2hB || h2hA === h2hB) {
-      setH2hError('異なる2人を選んでください')
-      return
-    }
-    try {
-      const data = await arenaApi.get(`/v1/head-to-head?a=${h2hA}&b=${h2hB}`)
-      setH2hResult(data)
-    } catch (e) {
-      setH2hError(errMsg(e))
-    }
-  }
-
-  function usernameOf(id) {
-    const u = users.find(u => String(u.id) === String(id))
-    return u ? u.username : `#${id}`
-  }
-
-  // ランキング上の行から、そのプレイヤーを A 側に固定してヘッドトゥヘッド詳細ページを開く
-  function openHeadToHead(userId) {
-    navigate(`/arena/head-to-head?a=${userId}`)
-  }
 
   return (
     <>
       <div className="page-header">
         <h1 className="page-title">🏆 ランキング</h1>
-        <p className="page-subtitle">Elo レーティングによる対戦成績のランキングです</p>
+        <p className="page-subtitle">タイトル別・総合・シリーズ（5番勝負）別の Elo レーティング</p>
       </div>
 
+      {error && <p className="arena-error">{error}</p>}
+
       <div className="card arena-card">
-        <div className="arena-ranking-tabs">
-          <button
-            type="button"
-            className={`arena-ranking-tab${selectedGame === 'overall' ? ' arena-ranking-tab--active' : ''}`}
-            onClick={() => setSelectedGame('overall')}
-          >
-            🏆 総合
-          </button>
+        <div className="arena-scope-tabs">
+          <button className={`arena-mode-tab${scope === 'overall' ? ' active' : ''}`}
+                  onClick={() => setScope('overall')}>総合</button>
+          <button className={`arena-mode-tab${scope === 'series' ? ' active' : ''}`}
+                  onClick={() => setScope('series')}>シリーズ</button>
           {games.map(g => (
-            <button
-              key={g.slug}
-              type="button"
-              className={`arena-ranking-tab${selectedGame === g.slug ? ' arena-ranking-tab--active' : ''}`}
-              onClick={() => setSelectedGame(g.slug)}
-            >
-              {g.icon || '🎮'} {g.name}
+            <button key={g.slug}
+                    className={`arena-mode-tab${scope === g.slug ? ' active' : ''}`}
+                    onClick={() => setScope(g.slug)}>
+              {g.icon || ''} {g.name}
             </button>
           ))}
         </div>
 
-        {selectedGame !== 'overall' && (
-          <p className="arena-stats-link-row">
-            <Link to={`/arena/stats/${selectedGame}`}>📊 このゲームのキャラ別統計を見る</Link>
-          </p>
+        {loading ? <p className="arena-loading">読み込み中…</p> : (
+          ranking.length === 0
+            ? <p className="arena-muted">まだ記録がありません。</p>
+            : (
+              <div className="arena-table-wrap">
+                <table className="arena-table">
+                  <thead>
+                    <tr><th>#</th><th>プレイヤー</th><th>レート</th><th>勝敗</th><th>連勝</th><th>最高</th></tr>
+                  </thead>
+                  <tbody>
+                    {ranking.map(r => (
+                      <tr key={r.user_id}>
+                        <td>{r.rank}</td>
+                        <td><Link to={`/arena/head-to-head?a=${r.user_id}`}>{r.username}</Link></td>
+                        <td><strong>{r.rating}</strong></td>
+                        <td>{r.wins}勝 {r.losses}敗</td>
+                        <td>{r.streak > 0 ? `${r.streak}連勝` : r.streak < 0 ? `${-r.streak}連敗` : '—'}</td>
+                        <td className="arena-muted">{r.peak_rating}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
         )}
+      </div>
 
-        {loading && <p className="arena-loading">読み込み中…</p>}
-        {error && <p className="arena-msg arena-msg--err">{error}</p>}
-
-        {!loading && !error && (
-          ranking.length === 0 ? (
-            <p className="arena-empty">まだ対戦記録がありません</p>
-          ) : (
-            <div className="arena-table-wrap">
-              <table className="arena-ranking-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>プレイヤー</th>
-                    <th>レート</th>
-                    <th>戦績</th>
-                    <th>連勝/連敗</th>
+      {stats && stats.stats.length > 0 && (
+        <div className="card arena-card">
+          <h2 className="arena-section-title">タイトル別の傾向</h2>
+          <p className="arena-muted">全 {stats.total_series} シリーズが対象</p>
+          <div className="arena-table-wrap">
+            <table className="arena-table">
+              <thead>
+                <tr><th>タイトル</th><th>BAN</th><th>PICK</th><th>Decider</th><th>BAN率</th><th>PICK率</th><th>実施</th></tr>
+              </thead>
+              <tbody>
+                {stats.stats.map(s => (
+                  <tr key={s.game_id}>
+                    <td>{s.game_icon} {s.game_name}</td>
+                    <td>{s.bans}</td>
+                    <td>{s.picks}</td>
+                    <td>{s.deciders}</td>
+                    <td>{pct(s.ban_rate)}</td>
+                    <td>{pct(s.pick_rate)}</td>
+                    <td>{s.played}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {ranking.map(r => (
-                    <tr key={r.user_id}>
-                      <td>{r.rank}</td>
-                      <td>
-                        <button type="button" className="arena-ranking-name-btn" onClick={() => openHeadToHead(r.user_id)}>
-                          {r.username}
-                        </button>
-                      </td>
-                      <td>{r.rating}</td>
-                      <td>{r.wins}勝{r.losses}敗</td>
-                      <td>{r.streak > 0 ? `${r.streak}連勝` : r.streak < 0 ? `${-r.streak}連敗` : '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )
-        )}
-      </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
-      <div className="card arena-card">
-        <p className="arena-panel-title">ヘッドトゥヘッド</p>
-        <form className="arena-h2h-form" onSubmit={handleH2h}>
-          <select className="form-input" value={h2hA} onChange={e => setH2hA(e.target.value)}>
-            <option value="">プレイヤーA</option>
-            {users.map(u => <option key={u.id} value={u.id}>{u.username}</option>)}
-          </select>
-          <span>vs</span>
-          <select className="form-input" value={h2hB} onChange={e => setH2hB(e.target.value)}>
-            <option value="">プレイヤーB</option>
-            {users.map(u => <option key={u.id} value={u.id}>{u.username}</option>)}
-          </select>
-          <button type="submit" className="btn btn-secondary arena-inline-btn">対戦成績を見る</button>
-        </form>
-        {h2hError && <p className="arena-msg arena-msg--err">{h2hError}</p>}
-        {h2hResult && (
-          <p className="arena-h2h-result">
-            {usernameOf(h2hResult.a)} {h2hResult.a_wins} - {h2hResult.b_wins} {usernameOf(h2hResult.b)}
-            {' '}（全 {h2hResult.total} 戦）
-            {' '}
-            <Link to={`/arena/head-to-head?a=${h2hA}&b=${h2hB}`}>詳細を見る（ゲーム別内訳・連勝連敗・PICK履歴）</Link>
-          </p>
-        )}
-      </div>
+      <Link to="/arena" className="btn btn-secondary arena-back">← バンピックトップへ</Link>
     </>
   )
 }

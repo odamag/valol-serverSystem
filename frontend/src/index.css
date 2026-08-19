@@ -2548,3 +2548,149 @@ body {
   .arena-h2h-match-date { margin-left: 0; }
   .arena-table-wrap .arena-stats-table { font-size: 0.8rem; }
 }
+
+/* ── Arena: タイトルドラフト（再設計版） ── */
+.arena-title-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+.arena-title-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 10px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: border-color 0.15s, transform 0.1s;
+}
+.arena-title-card:hover:not(:disabled) { border-color: var(--accent); transform: translateY(-2px); }
+.arena-title-card:disabled { cursor: not-allowed; opacity: 0.55; }
+.arena-title-card--selected { border-color: var(--accent); background: rgba(59, 130, 246, 0.15); }
+.arena-title-card--banned { opacity: 0.4; border-color: var(--danger); }
+.arena-title-card--picked { border-color: var(--success); background: rgba(16, 185, 129, 0.12); }
+.arena-title-card--decider { border-color: var(--warning); background: rgba(245, 158, 11, 0.12); }
+.arena-title-icon { font-size: 1.6rem; }
+.arena-title-name { text-align: center; line-height: 1.3; }
+.arena-title-mark { font-size: 0.72rem; color: var(--text-muted); }
+
+.arena-pool-count { color: var(--danger); font-size: 0.9rem; }
+.arena-pool-count--ok { color: var(--success); }
+
+.arena-step-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin-right: 6px;
+}
+.arena-step-ban { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
+.arena-step-pick { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; }
+.arena-step-decider { background: rgba(245, 158, 11, 0.2); color: #fcd34d; }
+.arena-seq-preview { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+
+.arena-turn-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.arena-turn-side { margin-right: 8px; }
+
+/* ルーレット */
+.arena-roulette { text-align: center; }
+.arena-roulette-wheel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  margin: 20px 0;
+  padding: 20px;
+  border: 2px dashed var(--card-border);
+  border-radius: var(--radius);
+}
+.arena-roulette-wheel--spinning { animation: arena-spin 0.35s linear infinite; }
+@keyframes arena-spin {
+  0% { opacity: 1; }
+  50% { opacity: 0.35; }
+  100% { opacity: 1; }
+}
+.arena-roulette-name { font-weight: 700; font-size: 1.05rem; }
+.arena-roulette-vs { color: var(--text-muted); }
+
+/* 5番勝負ボード */
+.arena-score-head { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; }
+.arena-score-side { display: flex; align-items: center; gap: 8px; }
+.arena-score-num { font-size: 1.8rem; font-weight: 700; }
+.arena-score-sep { color: var(--text-muted); }
+.arena-center { text-align: center; }
+.arena-winner-banner {
+  text-align: center;
+  padding: 12px;
+  margin: 14px 0;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid var(--warning);
+  border-radius: var(--radius);
+  font-weight: 700;
+}
+.arena-lineup { list-style: none; margin: 16px 0 0; padding: 0; }
+.arena-lineup-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--card-border);
+  flex-wrap: wrap;
+}
+.arena-lineup-row--done { opacity: 0.72; }
+.arena-lineup-row--next { background: rgba(59, 130, 246, 0.1); border-radius: var(--radius); }
+.arena-lineup-no { font-size: 0.78rem; color: var(--text-muted); min-width: 4.5em; }
+.arena-lineup-icon { font-size: 1.2rem; }
+.arena-lineup-name { flex: 1; min-width: 8em; }
+.arena-lineup-tag {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
+}
+.arena-lineup-tag--decider { background: rgba(245, 158, 11, 0.2); color: #fcd34d; }
+.arena-lineup-result { font-weight: 600; color: var(--success); }
+.arena-lineup-report { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.arena-timeline-icon { margin-right: 4px; }
+.arena-timeline-step--decider { border-left: 3px solid var(--warning); }
+
+.arena-series-list { list-style: none; margin: 0; padding: 0; }
+.arena-series-list li a {
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  padding: 10px; border-bottom: 1px solid var(--card-border);
+  color: var(--text); text-decoration: none;
+}
+.arena-series-list li a:hover { background: rgba(255, 255, 255, 0.04); }
+.arena-series-code { font-family: monospace; color: var(--accent); }
+.arena-series-status { font-size: 0.75rem; color: var(--text-muted); }
+
+.arena-admin-list { list-style: none; margin: 14px 0 0; padding: 0; }
+.arena-admin-list li {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 10px 0; border-bottom: 1px solid var(--card-border); flex-wrap: wrap;
+}
+.arena-key-value {
+  display: block; margin-top: 8px; padding: 8px;
+  background: rgba(0, 0, 0, 0.3); border-radius: 6px;
+  font-family: monospace; word-break: break-all;
+}
+.arena-subsection-title { margin: 18px 0 8px; font-size: 0.95rem; }
+.arena-scope-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.arena-h2h-games { list-style: none; margin: 8px 0 0; padding: 0; font-size: 0.85rem; }
+.arena-h2h-games li { display: flex; gap: 8px; align-items: center; padding: 4px 0; flex-wrap: wrap; }
+
+@media (max-width: 600px) {
+  .arena-title-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+  .arena-lineup-row { font-size: 0.88rem; }
+  .arena-score-num { font-size: 1.4rem; }
+}
