@@ -1895,3 +1895,827 @@ body {
   .val-add-row { flex-wrap: wrap; }
   .val-add-input { min-width: 0; }
 }
+
+/* ── Arena ── */
+.arena-card { margin-bottom: 20px; }
+
+.arena-loading, .arena-empty {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  padding: 8px 0;
+}
+
+.arena-msg {
+  font-size: 0.825rem;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-top: 8px;
+}
+.arena-msg--ok  { background: rgba(16, 185, 129, 0.12); color: #34d399; }
+.arena-msg--err { background: rgba(239, 68, 68, 0.12);  color: #f87171; }
+
+.arena-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.arena-panel-header-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.arena-panel-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.arena-panel-subtitle {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.arena-inline-btn { width: auto; padding: 7px 14px; font-size: 0.8rem; }
+
+.arena-inline-form {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.arena-inline-form .btn { width: auto; }
+
+.arena-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px 14px;
+  margin-bottom: 10px;
+}
+
+.arena-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.arena-form-actions .btn { width: auto; }
+
+.arena-checkbox-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 0.825rem;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+.arena-checkbox-row label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+
+.arena-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+}
+.arena-badge--muted { background: rgba(148, 163, 184, 0.12); color: var(--text-muted); }
+
+/* ゲーム一覧 */
+.arena-game-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.arena-game-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 4px 4px 4px 0;
+}
+.arena-game-list-item--active { border-color: var(--accent); background: rgba(59, 130, 246, 0.08); }
+.arena-game-list-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  padding: 10px 12px;
+  cursor: pointer;
+  border-radius: 8px;
+  min-width: 0;
+}
+.arena-game-list-btn:hover { background: rgba(255, 255, 255, 0.05); }
+.arena-game-list-icon { font-size: 1.2rem; flex-shrink: 0; }
+.arena-game-list-name { font-weight: 600; }
+.arena-game-list-slug { color: var(--text-muted); font-size: 0.75rem; margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.arena-subsection {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--card-border);
+}
+
+.arena-admin-actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
+.arena-admin-actions .btn { width: auto; }
+
+/* エントリー */
+.arena-entry-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.arena-entry-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+.arena-entry-thumb { width: 28px; height: 28px; border-radius: 6px; object-fit: cover; flex-shrink: 0; }
+.arena-entry-name { font-weight: 600; }
+.arena-entry-slug { color: var(--text-muted); font-size: 0.75rem; }
+.arena-entry-actions { display: flex; gap: 6px; margin-left: auto; }
+.arena-entry-edit { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.arena-entry-edit-actions { display: flex; gap: 8px; }
+
+/* ルールセット */
+.arena-ruleset-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+.arena-ruleset-item {
+  padding: 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+}
+.arena-ruleset-summary { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.arena-ruleset-meta { color: var(--text-muted); font-size: 0.8rem; }
+.arena-ruleset-edit { display: flex; flex-direction: column; gap: 10px; }
+
+/* BAN/PICKシーケンス */
+.arena-seq-builder { margin-top: 6px; }
+.arena-seq-add-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.arena-seq-add-btn { width: auto; padding: 8px 14px; font-size: 0.8rem; }
+
+.arena-seq-preview {
+  background: var(--main-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 8px;
+}
+.arena-seq-empty { color: var(--text-muted); font-size: 0.825rem; }
+
+.arena-seq-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.arena-seq-item { display: flex; align-items: center; gap: 8px; }
+.arena-seq-index { color: var(--text-muted); font-size: 0.75rem; width: 18px; text-align: right; flex-shrink: 0; }
+.arena-seq-item-actions { display: flex; gap: 4px; margin-left: auto; }
+
+.arena-seq-mini-preview { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+
+.arena-seq-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.arena-step-ban  { background: rgba(239, 68, 68, 0.15);  color: #f87171; }
+.arena-step-pick { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+
+.arena-seq-mini-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--card-border);
+  color: var(--text-muted);
+  border-radius: 6px;
+  width: 26px;
+  height: 26px;
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+.arena-seq-mini-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); color: var(--text); }
+.arena-seq-mini-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.arena-seq-mini-btn--danger:hover:not(:disabled) { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+
+.arena-seq-clear {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+/* 一括インポート */
+.arena-bulk-import {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 16px;
+}
+.arena-bulk-hint { color: var(--text-muted); font-size: 0.8rem; margin-bottom: 8px; }
+.arena-bulk-textarea { resize: vertical; font-family: inherit; }
+.arena-bulk-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.arena-bulk-count { color: var(--text-muted); font-size: 0.8rem; }
+.arena-bulk-submit { width: auto; }
+.arena-bulk-preview {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+.arena-bulk-preview li {
+  background: var(--main-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-size: 0.78rem;
+}
+.arena-bulk-more { color: var(--text-muted); }
+
+/* APIキー */
+.arena-key-issued {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 14px;
+  font-size: 0.85rem;
+}
+.arena-key-value {
+  display: block;
+  margin-top: 6px;
+  background: var(--main-bg);
+  padding: 8px 10px;
+  border-radius: 6px;
+  word-break: break-all;
+  font-size: 0.85rem;
+}
+.arena-key-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; background: none; border: none; padding: 0; margin-bottom: 14px; }
+.arena-key-form .form-input { flex: 1; min-width: 160px; }
+.arena-key-form .btn { width: auto; }
+
+.arena-key-list, .arena-admin-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.arena-key-item, .arena-admin-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+}
+.arena-key-name { font-weight: 600; }
+
+/* 所持ゲーム */
+.arena-checklist { list-style: none; display: flex; flex-direction: column; gap: 4px; margin-bottom: 16px; }
+.arena-checklist-item { border-bottom: 1px solid var(--card-border); }
+.arena-checklist-item:last-child { border-bottom: none; }
+.arena-checklist-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 4px;
+  cursor: pointer;
+}
+.arena-checklist-label input { width: 18px; height: 18px; flex-shrink: 0; }
+.arena-checklist-icon { font-size: 1.1rem; }
+
+/* Arenaホーム */
+.arena-home-links { display: flex; flex-direction: column; gap: 10px; }
+.arena-home-link {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  color: var(--text);
+  text-decoration: none;
+  transition: background 0.12s, border-color 0.12s;
+}
+.arena-home-link:hover { background: rgba(255, 255, 255, 0.05); border-color: var(--accent); }
+.arena-home-link-icon { font-size: 1.5rem; flex-shrink: 0; }
+.arena-home-link strong { display: block; margin-bottom: 2px; }
+.arena-home-link-desc { color: var(--text-muted); font-size: 0.8rem; }
+
+.arena-placeholder { text-align: center; padding: 32px 24px; }
+.arena-placeholder-title { font-weight: 700; margin-bottom: 8px; }
+.arena-placeholder-desc { color: var(--text-muted); font-size: 0.875rem; line-height: 1.6; }
+
+@media (max-width: 600px) {
+  .arena-form-grid { grid-template-columns: 1fr; }
+  .arena-panel-header { flex-direction: column; align-items: stretch; }
+  .arena-entry-actions { margin-left: 0; width: 100%; }
+  .arena-key-item, .arena-admin-item { flex-wrap: wrap; }
+}
+
+/* 管理者未登録時の案内バナー */
+.arena-notice {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid var(--warning);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 18px;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+/* ── Arena Phase 3（対戦作成・ドラフト・結果・ランキング） ── */
+
+.arena-panel-desc {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+.arena-back-link { margin-top: 16px; font-size: 0.85rem; }
+.arena-back-link a { color: var(--text-muted); text-decoration: none; }
+.arena-back-link a:hover { color: var(--text); text-decoration: underline; }
+
+.arena-match-hint { margin-bottom: 14px; }
+.arena-match-cancel { margin-top: 16px; }
+
+/* 進行中・最近の試合一覧（ホーム） */
+.arena-match-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.arena-match-list-item { border: 1px solid var(--card-border); border-radius: 8px; overflow: hidden; }
+.arena-match-list-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  color: var(--text);
+  text-decoration: none;
+  transition: background 0.12s;
+}
+.arena-match-list-link:hover { background: rgba(255, 255, 255, 0.05); }
+.arena-match-list-icon { font-size: 1.3rem; flex-shrink: 0; }
+.arena-match-list-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.arena-match-list-sub { color: var(--text-muted); font-size: 0.78rem; }
+
+/* 試合ステータスバッジ */
+.arena-status-badge--waiting  { background: rgba(148, 163, 184, 0.15); color: var(--text-muted); }
+.arena-status-badge--drafting { background: rgba(59, 130, 246, 0.15);  color: #60a5fa; }
+.arena-status-badge--playing  { background: rgba(245, 158, 11, 0.15);  color: #fbbf24; }
+.arena-status-badge--reported { background: rgba(245, 158, 11, 0.2);   color: #fbbf24; }
+.arena-status-badge--finished { background: rgba(16, 185, 129, 0.15);  color: #34d399; }
+.arena-status-badge--cancelled{ background: rgba(239, 68, 68, 0.12);   color: #f87171; }
+
+/* 結果・レート増減 */
+.arena-result-summary { margin: 10px 0; line-height: 1.8; }
+.arena-rating-delta { color: var(--text-muted); font-size: 0.875rem; }
+
+/* ドラフト：手番バナー */
+.arena-turn-banner {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  font-size: 1rem;
+}
+.arena-turn-hint { color: var(--text-muted); font-size: 0.8rem; margin-top: 6px; }
+
+/* ドラフト：進行帯（タイムライン） */
+.arena-timeline { list-style: none; display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.arena-timeline-step {
+  flex-shrink: 0;
+  min-width: 120px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.arena-timeline-step--current { border-color: var(--accent); background: rgba(59, 130, 246, 0.08); }
+.arena-timeline-step--done { opacity: 0.9; }
+.arena-timeline-label { font-size: 0.7rem; font-weight: 700; color: var(--text-muted); }
+.arena-timeline-step--ban .arena-timeline-label { color: #f87171; }
+.arena-timeline-step--pick .arena-timeline-label { color: #34d399; }
+.arena-timeline-entry { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; }
+.arena-timeline-entry img { width: 22px; height: 22px; border-radius: 5px; object-fit: cover; flex-shrink: 0; }
+.arena-timeline-entry--pending { color: var(--text-muted); }
+
+/* ドラフト：エントリー選択グリッド */
+.arena-entry-grid-wrap { margin-top: 6px; }
+.arena-entry-grid-search { margin-bottom: 12px; }
+.arena-entry-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+  max-height: 480px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.arena-entry-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 8px 6px;
+  cursor: pointer;
+  color: var(--text);
+  transition: background 0.12s, border-color 0.12s, transform 0.1s;
+}
+.arena-entry-cell:hover:not(:disabled) { background: rgba(59, 130, 246, 0.1); border-color: var(--accent); }
+.arena-entry-cell:active:not(:disabled) { transform: scale(0.97); }
+.arena-entry-cell:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+.arena-entry-cell--unavailable { background: rgba(239, 68, 68, 0.06); }
+.arena-entry-cell-img { width: 48px; height: 48px; border-radius: 6px; object-fit: cover; }
+.arena-entry-cell-placeholder {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--text-muted);
+}
+.arena-entry-cell-name {
+  font-size: 0.72rem;
+  text-align: center;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* ランキング */
+.arena-ranking-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.arena-ranking-tab {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--card-border);
+  color: var(--text-muted);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.arena-ranking-tab:hover { background: rgba(255, 255, 255, 0.1); color: var(--text); }
+.arena-ranking-tab--active { background: var(--accent); border-color: var(--accent); color: white; }
+
+.arena-table-wrap { overflow-x: auto; }
+.arena-ranking-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+.arena-ranking-table th, .arena-ranking-table td {
+  text-align: left;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--card-border);
+  white-space: nowrap;
+}
+.arena-ranking-table th { color: var(--text-muted); font-weight: 600; font-size: 0.78rem; }
+
+/* ヘッドトゥヘッド */
+.arena-h2h-form { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.arena-h2h-form .form-input { flex: 1; min-width: 140px; }
+.arena-h2h-form .btn { width: auto; }
+.arena-h2h-result { font-size: 0.95rem; }
+
+@media (max-width: 600px) {
+  .arena-entry-grid { grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); }
+  .arena-entry-cell-img, .arena-entry-cell-placeholder { width: 40px; height: 40px; }
+  .arena-h2h-form { flex-direction: column; align-items: stretch; }
+  .arena-h2h-form .form-input { width: 100%; }
+}
+
+/* ── Arena Phase 4（オンライン対戦：ルーム作成・参加・手番タイマー） ── */
+
+/* ローカル/オンラインの切り替えタブ */
+.arena-mode-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+.arena-mode-tab {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--card-border);
+  color: var(--text-muted);
+  border-radius: 20px;
+  padding: 6px 16px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.arena-mode-tab:hover { background: rgba(255, 255, 255, 0.1); color: var(--text); }
+.arena-mode-tab--active { background: var(--accent); border-color: var(--accent); color: white; }
+
+/* ルームコード表示（作成直後・待機画面共通） */
+.arena-room-code-box { text-align: center; padding: 18px 14px; }
+.arena-room-code {
+  font-family: monospace;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px dashed var(--card-border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin: 10px 0;
+  word-break: break-all;
+}
+
+/* コードで参加フォーム */
+.arena-join-form { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.arena-join-input { flex: 1; min-width: 160px; font-family: monospace; letter-spacing: 0.08em; }
+.arena-join-form .btn { width: auto; }
+
+/* 手番タイマー */
+.arena-turn-timer {
+  display: inline-block;
+  margin-left: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.arena-turn-timer--urgent { color: var(--danger); }
+
+@media (max-width: 600px) {
+  .arena-room-code { font-size: 1.4rem; }
+  .arena-join-form { flex-direction: column; align-items: stretch; }
+  .arena-join-form .btn { width: 100%; }
+}
+
+/* ── Arena Phase 6（フィアレス/BO3シリーズ・ヘッドトゥヘッド詳細・キャラ別統計） ── */
+
+/* BO3/BO5 選択時のフィアレス注意書き */
+.arena-fearless-hint {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  color: var(--warning);
+  font-size: 0.82rem;
+}
+
+/* シリーズ戦績ボックス（試合詳細・ドラフト画面共通） */
+.arena-series-box {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--card-border);
+}
+.arena-series-score {
+  font-size: 1.15rem;
+  margin: 6px 0 10px;
+}
+.arena-series-inline-badge {
+  margin-left: 10px;
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--warning);
+}
+
+/* ランキング行からヘッドトゥヘッドへ飛ぶボタン（見た目はリンクっぽく） */
+.arena-ranking-name-btn {
+  background: none;
+  border: none;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline dotted;
+}
+.arena-ranking-name-btn:hover { color: var(--accent); }
+
+/* ゲーム別統計へのリンク行 */
+.arena-stats-link-row { margin: -4px 0 14px; font-size: 0.85rem; }
+.arena-stats-link-row a { color: var(--accent); text-decoration: none; }
+.arena-stats-link-row a:hover { text-decoration: underline; }
+
+/* 統計テーブル：ソート可能なヘッダ */
+.arena-stats-sort-th { cursor: pointer; user-select: none; white-space: nowrap; }
+.arena-stats-sort-th:hover { color: var(--text); }
+.arena-stats-entry-cell { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.arena-stats-entry-img {
+  width: 26px; height: 26px; border-radius: 6px; object-fit: cover;
+  border: 1px solid var(--card-border);
+}
+
+/* ヘッドトゥヘッド詳細ページ */
+.arena-h2h-result--big { font-size: 1.2rem; margin-top: 10px; }
+.arena-h2h-match-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.arena-h2h-match-item {
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+.arena-h2h-match-head {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  font-size: 0.85rem; margin-bottom: 8px;
+}
+.arena-h2h-win  { color: var(--success); font-weight: 600; }
+.arena-h2h-loss { color: var(--text-muted); }
+.arena-h2h-match-date { color: var(--text-muted); font-size: 0.78rem; margin-left: auto; }
+.arena-h2h-picks { display: flex; flex-direction: column; gap: 4px; font-size: 0.82rem; }
+.arena-h2h-picks-label { color: var(--text-muted); margin-right: 6px; }
+.arena-empty-inline { color: var(--text-muted); }
+
+.arena-pick-chip, .arena-ban-chip {
+  display: inline-block;
+  border-radius: 12px;
+  padding: 2px 9px;
+  margin: 2px 4px 2px 0;
+  font-size: 0.78rem;
+}
+.arena-pick-chip { background: rgba(59, 130, 246, 0.12); color: #60a5fa; }
+.arena-ban-chip  { background: rgba(239, 68, 68, 0.12);  color: #f87171; text-decoration: line-through; }
+
+@media (max-width: 600px) {
+  .arena-h2h-match-head { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .arena-h2h-match-date { margin-left: 0; }
+  .arena-table-wrap .arena-stats-table { font-size: 0.8rem; }
+}
+
+/* ── Arena: タイトルドラフト（再設計版） ── */
+.arena-title-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+.arena-title-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 10px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: border-color 0.15s, transform 0.1s;
+}
+.arena-title-card:hover:not(:disabled) { border-color: var(--accent); transform: translateY(-2px); }
+.arena-title-card:disabled { cursor: not-allowed; opacity: 0.55; }
+.arena-title-card--selected { border-color: var(--accent); background: rgba(59, 130, 246, 0.15); }
+.arena-title-card--banned { opacity: 0.4; border-color: var(--danger); }
+.arena-title-card--picked { border-color: var(--success); background: rgba(16, 185, 129, 0.12); }
+.arena-title-card--decider { border-color: var(--warning); background: rgba(245, 158, 11, 0.12); }
+.arena-title-icon { font-size: 1.6rem; }
+.arena-title-name { text-align: center; line-height: 1.3; }
+.arena-title-mark { font-size: 0.72rem; color: var(--text-muted); }
+
+.arena-pool-count { color: var(--danger); font-size: 0.9rem; }
+.arena-pool-count--ok { color: var(--success); }
+
+.arena-step-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin-right: 6px;
+}
+.arena-step-ban { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
+.arena-step-pick { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; }
+.arena-step-decider { background: rgba(245, 158, 11, 0.2); color: #fcd34d; }
+.arena-seq-preview { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+
+.arena-turn-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.arena-turn-side { margin-right: 8px; }
+
+/* ルーレット */
+.arena-roulette { text-align: center; }
+.arena-roulette-wheel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  margin: 20px 0;
+  padding: 20px;
+  border: 2px dashed var(--card-border);
+  border-radius: var(--radius);
+}
+.arena-roulette-wheel--spinning { animation: arena-spin 0.35s linear infinite; }
+@keyframes arena-spin {
+  0% { opacity: 1; }
+  50% { opacity: 0.35; }
+  100% { opacity: 1; }
+}
+.arena-roulette-name { font-weight: 700; font-size: 1.05rem; }
+.arena-roulette-vs { color: var(--text-muted); }
+
+/* 5番勝負ボード */
+.arena-score-head { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; }
+.arena-score-side { display: flex; align-items: center; gap: 8px; }
+.arena-score-num { font-size: 1.8rem; font-weight: 700; }
+.arena-score-sep { color: var(--text-muted); }
+.arena-center { text-align: center; }
+.arena-winner-banner {
+  text-align: center;
+  padding: 12px;
+  margin: 14px 0;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid var(--warning);
+  border-radius: var(--radius);
+  font-weight: 700;
+}
+.arena-lineup { list-style: none; margin: 16px 0 0; padding: 0; }
+.arena-lineup-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--card-border);
+  flex-wrap: wrap;
+}
+.arena-lineup-row--done { opacity: 0.72; }
+.arena-lineup-row--next { background: rgba(59, 130, 246, 0.1); border-radius: var(--radius); }
+.arena-lineup-no { font-size: 0.78rem; color: var(--text-muted); min-width: 4.5em; }
+.arena-lineup-icon { font-size: 1.2rem; }
+.arena-lineup-name { flex: 1; min-width: 8em; }
+.arena-lineup-tag {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
+}
+.arena-lineup-tag--decider { background: rgba(245, 158, 11, 0.2); color: #fcd34d; }
+.arena-lineup-result { font-weight: 600; color: var(--success); }
+.arena-lineup-report { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.arena-timeline-icon { margin-right: 4px; }
+.arena-timeline-step--decider { border-left: 3px solid var(--warning); }
+
+.arena-series-list { list-style: none; margin: 0; padding: 0; }
+.arena-series-list li a {
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  padding: 10px; border-bottom: 1px solid var(--card-border);
+  color: var(--text); text-decoration: none;
+}
+.arena-series-list li a:hover { background: rgba(255, 255, 255, 0.04); }
+.arena-series-code { font-family: monospace; color: var(--accent); }
+.arena-series-status { font-size: 0.75rem; color: var(--text-muted); }
+
+.arena-admin-list { list-style: none; margin: 14px 0 0; padding: 0; }
+.arena-admin-list li {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 10px 0; border-bottom: 1px solid var(--card-border); flex-wrap: wrap;
+}
+.arena-key-value {
+  display: block; margin-top: 8px; padding: 8px;
+  background: rgba(0, 0, 0, 0.3); border-radius: 6px;
+  font-family: monospace; word-break: break-all;
+}
+.arena-subsection-title { margin: 18px 0 8px; font-size: 0.95rem; }
+.arena-scope-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.arena-h2h-games { list-style: none; margin: 8px 0 0; padding: 0; font-size: 0.85rem; }
+.arena-h2h-games li { display: flex; gap: 8px; align-items: center; padding: 4px 0; flex-wrap: wrap; }
+
+@media (max-width: 600px) {
+  .arena-title-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+  .arena-lineup-row { font-size: 0.88rem; }
+  .arena-score-num { font-size: 1.4rem; }
+}
+
+/* 先手後手の決定（ルーレット / レート差による選択） */
+.arena-rate {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+.arena-side-choice {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.arena-badge {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  background: rgba(59, 130, 246, 0.22);
+  color: #93c5fd;
+}
+.arena-badge--muted { background: rgba(255, 255, 255, 0.1); color: var(--text-muted); }

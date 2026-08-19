@@ -1,0 +1,33 @@
+{
+  "games": [
+    { "slug": "lol", "name": "League of Legends", "icon": "⚔️", "sort_order": 1 },
+    { "slug": "valorant", "name": "VALORANT", "icon": "🎯", "sort_order": 2 },
+    { "slug": "sf6", "name": "ストリートファイター6", "icon": "🥊", "sort_order": 3 },
+    { "slug": "tekken8", "name": "鉄拳8", "icon": "👊", "sort_order": 4 },
+    { "slug": "apex", "name": "Apex Legends", "icon": "🎮", "sort_order": 5 },
+    { "slug": "overwatch2", "name": "Overwatch 2", "icon": "🛡️", "sort_order": 6 },
+    { "slug": "rocket-league", "name": "Rocket League", "icon": "🚀", "sort_order": 7 },
+    { "slug": "smash", "name": "大乱闘スマッシュブラザーズ SPECIAL", "icon": "🔨", "sort_order": 8 },
+    { "slug": "mario-kart8", "name": "マリオカート8 デラックス", "icon": "🏎️", "sort_order": 9 }
+  ],
+  "formats": [
+    {
+      "slug": "standard9",
+      "name": "標準9タイトル 5番勝負",
+      "pool_size": 9,
+      "wins_needed": 3,
+      "turn_seconds": 0,
+      "is_default": true,
+      "sequence": [
+        { "t": "ban", "s": "A" },
+        { "t": "ban", "s": "B" },
+        { "t": "pick", "s": "B" },
+        { "t": "pick", "s": "A" },
+        { "t": "ban", "s": "B" },
+        { "t": "ban", "s": "A" },
+        { "t": "pick", "s": "A" },
+        { "t": "pick", "s": "B" }
+      ]
+    }
+  ]
+}
