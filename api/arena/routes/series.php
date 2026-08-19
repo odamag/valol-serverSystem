@@ -249,6 +249,10 @@ function arenaHandleSeriesGet(array $params, PDO $db): void {
     if ($format && $series['status'] === 'drafting') {
         $series = arenaApplySeriesTimeouts($db, $series, $format);
     }
+    // 48時間承認されなかった申告をここで自動確定させる（cron不要の遅延評価）
+    if ($series['status'] === 'playing' && arenaMaybeAutoConfirmSeriesGames($db, $series)) {
+        $series = arenaLoadSeries($db, $series['public_id']);
+    }
 
     jsonResponse([
         'success' => true,

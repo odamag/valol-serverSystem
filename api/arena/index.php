@@ -13,6 +13,7 @@ require_once __DIR__ . '/routes/read.php';
 require_once __DIR__ . '/routes/admin.php';
 require_once __DIR__ . '/routes/me.php';
 require_once __DIR__ . '/routes/series.php';
+require_once __DIR__ . '/routes/result.php';
 require_once __DIR__ . '/routes/ranking.php';
 
 // ── リクエストパスの解決 ──────────────────────────────────────────
@@ -60,10 +61,15 @@ $routes = [
     ['POST', '#^/v1/series/(?P<public_id>[a-f0-9]{8})/draft$#',         'arenaHandleSeriesDraftPost'],
     ['POST', '#^/v1/series/(?P<public_id>[a-f0-9]{8})/cancel$#',        'arenaHandleSeriesCancel'],
 
+    // 5番勝負の勝敗記録（申告 → 相手の承認でElo確定）
+    ['POST', '#^/v1/series/(?P<public_id>[a-f0-9]{8})/games/(?P<game_no>\d+)/result$#',  'arenaHandleSeriesGameResult'],
+    ['POST', '#^/v1/series/(?P<public_id>[a-f0-9]{8})/games/(?P<game_no>\d+)/confirm$#', 'arenaHandleSeriesGameConfirm'],
+
     // ランキング
     ['GET', '#^/v1/ranking$#',                       'arenaHandleRanking'],
     ['GET', '#^/v1/players/(?P<id>\d+)$#',           'arenaHandlePlayer'],
     ['GET', '#^/v1/head-to-head$#',                  'arenaHandleHeadToHead'],
+    ['GET', '#^/v1/title-stats$#',                   'arenaHandleTitleStats'],
 
     // ゲームマスタ / フォーマット管理（管理者のみ。各ハンドラ内で requireArenaAdmin() を呼ぶ）
     ['POST',   '#^/v1/admin/games$#',                         'arenaHandleAdminGameCreate'],
