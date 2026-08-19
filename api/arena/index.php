@@ -5,13 +5,14 @@ session_start();
 require_once dirname(__DIR__) . '/common.php';
 require_once __DIR__ . '/lib/db.php';
 require_once __DIR__ . '/lib/auth.php';
+require_once __DIR__ . '/lib/format.php';
 require_once __DIR__ . '/lib/seed.php';
-require_once __DIR__ . '/lib/draft.php';
+require_once __DIR__ . '/lib/series.php';
 require_once __DIR__ . '/lib/rating.php';
 require_once __DIR__ . '/routes/read.php';
 require_once __DIR__ . '/routes/admin.php';
 require_once __DIR__ . '/routes/me.php';
-require_once __DIR__ . '/routes/match.php';
+require_once __DIR__ . '/routes/series.php';
 require_once __DIR__ . '/routes/ranking.php';
 
 // ── リクエストパスの解決 ──────────────────────────────────────────
@@ -42,52 +43,42 @@ function arenaResolvePath(): string {
 $routes = [
     ['GET', '#^/v1/users$#',                      'arenaHandleUsers'],
     ['GET', '#^/v1/games$#',                       'arenaHandleGames'],
-    ['GET', '#^/v1/games/(?P<slug>[a-z0-9_-]+)/entries$#', 'arenaHandleGameEntries'],
-    ['GET', '#^/v1/games/(?P<slug>[a-z0-9_-]+)/stats$#',   'arenaHandleGameStats'],
+    ['GET', '#^/v1/formats$#',                     'arenaHandleFormats'],
     ['GET', '#^/v1/me$#',                          'arenaHandleMe'],
 
     // 所持ゲーム
     ['GET', '#^/v1/me/games$#',                     'arenaHandleMeGamesGet'],
     ['PUT', '#^/v1/me/games$#',                     'arenaHandleMeGamesPut'],
 
-    // 試合（ローカル / オンライン両モード）
-    ['POST', '#^/v1/matches$#',                                       'arenaHandleMatchCreate'],
-    ['GET',  '#^/v1/matches$#',                                       'arenaHandleMatchList'],
-    ['GET',  '#^/v1/matches/(?P<public_id>[a-f0-9]{8})$#',            'arenaHandleMatchGet'],
-    ['POST', '#^/v1/matches/(?P<public_id>[a-f0-9]{8})/join$#',       'arenaHandleMatchJoin'],
-    ['GET',  '#^/v1/matches/(?P<public_id>[a-f0-9]{8})/draft$#',      'arenaHandleMatchDraftGet'],
-    ['POST', '#^/v1/matches/(?P<public_id>[a-f0-9]{8})/draft$#',      'arenaHandleMatchDraftPost'],
-    ['POST', '#^/v1/matches/(?P<public_id>[a-f0-9]{8})/result$#',     'arenaHandleMatchResult'],
-    ['POST', '#^/v1/matches/(?P<public_id>[a-f0-9]{8})/confirm$#',    'arenaHandleMatchConfirm'],
-    ['POST', '#^/v1/matches/(?P<public_id>[a-f0-9]{8})/cancel$#',     'arenaHandleMatchCancel'],
-
-    // フィアレス／BO3 シリーズ
-    ['GET', '#^/v1/series/(?P<series_id>[a-f0-9]{8})$#',              'arenaHandleSeriesGet'],
+    // シリーズ（タイトルドラフト → 5番勝負）。ローカル / オンライン両モード対応
+    ['POST', '#^/v1/series$#',                                          'arenaHandleSeriesCreate'],
+    ['GET',  '#^/v1/series$#',                                          'arenaHandleSeriesList'],
+    ['GET',  '#^/v1/series/(?P<public_id>[a-f0-9]{8})$#',               'arenaHandleSeriesGet'],
+    ['POST', '#^/v1/series/(?P<public_id>[a-f0-9]{8})/join$#',          'arenaHandleSeriesJoin'],
+    ['POST', '#^/v1/series/(?P<public_id>[a-f0-9]{8})/roulette$#',      'arenaHandleSeriesRoulette'],
+    ['GET',  '#^/v1/series/(?P<public_id>[a-f0-9]{8})/draft$#',         'arenaHandleSeriesDraftGet'],
+    ['POST', '#^/v1/series/(?P<public_id>[a-f0-9]{8})/draft$#',         'arenaHandleSeriesDraftPost'],
+    ['POST', '#^/v1/series/(?P<public_id>[a-f0-9]{8})/cancel$#',        'arenaHandleSeriesCancel'],
 
     // ランキング
     ['GET', '#^/v1/ranking$#',                       'arenaHandleRanking'],
     ['GET', '#^/v1/players/(?P<id>\d+)$#',           'arenaHandlePlayer'],
     ['GET', '#^/v1/head-to-head$#',                  'arenaHandleHeadToHead'],
 
-    // ゲームマスタ管理（管理者のみ。各ハンドラ内で requireArenaAdmin() を呼ぶ）
-    ['POST',   '#^/v1/admin/games$#',                                     'arenaHandleAdminGameCreate'],
-    ['PATCH',  '#^/v1/admin/games/(?P<slug>[a-z0-9_-]+)$#',               'arenaHandleAdminGameUpdate'],
-    ['DELETE', '#^/v1/admin/games/(?P<slug>[a-z0-9_-]+)$#',               'arenaHandleAdminGameDelete'],
-    ['POST',   '#^/v1/admin/games/(?P<slug>[a-z0-9_-]+)/entries$#',       'arenaHandleAdminEntryCreate'],
-    ['POST',   '#^/v1/admin/games/(?P<slug>[a-z0-9_-]+)/entries/import$#', 'arenaHandleAdminEntryImport'],
-    ['PATCH',  '#^/v1/admin/entries/(?P<id>\d+)$#',                       'arenaHandleAdminEntryUpdate'],
-    ['DELETE', '#^/v1/admin/entries/(?P<id>\d+)$#',                       'arenaHandleAdminEntryDelete'],
-    ['POST',   '#^/v1/admin/games/(?P<slug>[a-z0-9_-]+)/rulesets$#',      'arenaHandleAdminRulesetCreate'],
-    ['PATCH',  '#^/v1/admin/rulesets/(?P<id>\d+)$#',                      'arenaHandleAdminRulesetUpdate'],
-    ['DELETE', '#^/v1/admin/rulesets/(?P<id>\d+)$#',                      'arenaHandleAdminRulesetDelete'],
-    ['POST',   '#^/v1/admin/games/(?P<slug>[a-z0-9_-]+)/sync$#',          'arenaHandleAdminGameSync'],
-    ['POST',   '#^/v1/admin/games/(?P<slug>[a-z0-9_-]+)/reseed$#',        'arenaHandleAdminGameReseed'],
-    ['GET',    '#^/v1/admin/keys$#',                                     'arenaHandleAdminKeysList'],
-    ['POST',   '#^/v1/admin/keys$#',                                     'arenaHandleAdminKeyCreate'],
-    ['DELETE', '#^/v1/admin/keys/(?P<id>\d+)$#',                         'arenaHandleAdminKeyDelete'],
-    ['GET',    '#^/v1/admin/admins$#',                                   'arenaHandleAdminAdminsList'],
-    ['POST',   '#^/v1/admin/admins$#',                                   'arenaHandleAdminAdminCreate'],
-    ['DELETE', '#^/v1/admin/admins/(?P<id>\d+)$#',                       'arenaHandleAdminAdminDelete'],
+    // ゲームマスタ / フォーマット管理（管理者のみ。各ハンドラ内で requireArenaAdmin() を呼ぶ）
+    ['POST',   '#^/v1/admin/games$#',                         'arenaHandleAdminGameCreate'],
+    ['PATCH',  '#^/v1/admin/games/(?P<slug>[a-z0-9_-]+)$#',   'arenaHandleAdminGameUpdate'],
+    ['DELETE', '#^/v1/admin/games/(?P<slug>[a-z0-9_-]+)$#',   'arenaHandleAdminGameDelete'],
+    ['GET',    '#^/v1/admin/formats$#',                       'arenaHandleAdminFormatsList'],
+    ['POST',   '#^/v1/admin/formats$#',                       'arenaHandleAdminFormatCreate'],
+    ['PATCH',  '#^/v1/admin/formats/(?P<id>\d+)$#',           'arenaHandleAdminFormatUpdate'],
+    ['DELETE', '#^/v1/admin/formats/(?P<id>\d+)$#',           'arenaHandleAdminFormatDelete'],
+    ['GET',    '#^/v1/admin/keys$#',                          'arenaHandleAdminKeysList'],
+    ['POST',   '#^/v1/admin/keys$#',                          'arenaHandleAdminKeyCreate'],
+    ['DELETE', '#^/v1/admin/keys/(?P<id>\d+)$#',              'arenaHandleAdminKeyDelete'],
+    ['GET',    '#^/v1/admin/admins$#',                        'arenaHandleAdminAdminsList'],
+    ['POST',   '#^/v1/admin/admins$#',                        'arenaHandleAdminAdminCreate'],
+    ['DELETE', '#^/v1/admin/admins/(?P<id>\d+)$#',            'arenaHandleAdminAdminDelete'],
 ];
 
 function arenaDispatch(array $routes, string $path, string $method, PDO $db): void {

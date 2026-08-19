@@ -1,11 +1,12 @@
 <?php
-// 結果申告の確定処理とEloレーティング。
-// 反映は必ず「arena_rating_history へINSERT → arena_ratings をUPDATE」の順で
-// 1トランザクション内に収める。history の UNIQUE(match_id, game_id, user_id) が
-// 二重反映を防ぐ最終防壁になる。
-
-// 48時間経過した reported を自動承認するまでの秒数（cronは使わず、次に読まれた時に判定する）
-const ARENA_RESULT_AUTO_CONFIRM_SECONDS = 48 * 3600;
+// Eloレーティングの計算ヘルパー（R1時点）。
+//
+// ★セクション12での再設計に伴い、結果申告・確定・自動承認まわり（旧
+// arenaApplyMatchResult() / arenaMaybeAutoConfirm()）は arena_matches 前提で
+// 書かれていたため、このR1（タイトルドラフトのコア実装）ではいったん削除した。
+// R2（結果申告 + Elo反映 + ランキング）で、arena_series_games（試合単位=scope='game'）
+// と arena_series（シリーズ単位=scope='series'）の2スコープに対応する形で実装し直す。
+// ここに残す計算関数・レート行ヘルパーはそのままR2から呼び出せる形にしてある。
 
 // 勝者の期待勝率（0〜1）
 function eloExpected(float $ra, float $rb): float {
@@ -24,6 +25,7 @@ function eloK(int $played): int {
 }
 
 // game_id/user_id の arena_ratings 行を取得する。無ければ 1200 で新規作成してから返す。
+// game_id の意味は db.php のコメントの通り：正の値=タイトル別 / 0=総合 / -1=シリーズ別。
 function arenaGetOrCreateRating(PDO $db, int $gameId, int $userId, string $username): array {
     $stmt = $db->prepare('SELECT * FROM arena_ratings WHERE game_id = ? AND user_id = ?');
     $stmt->execute([$gameId, $userId]);
@@ -71,19 +73,22 @@ function arenaUpdateRatingRow(PDO $db, int $gameId, int $userId, string $usernam
     $upd->execute([$username, $newRating, $wins, $losses, $streak, $peak, $now, $gameId, $userId]);
 }
 
-// 1つのスコープ（$scopeGameId: ゲーム別のIDまたは0=総合）について Elo を計算・反映する。
-// 先に arena_rating_history へ INSERT してから arena_ratings を UPDATE する。
+// 1つのスコープ（'game'|'series'）・1つの ref_id・1つの game_id について Elo を計算・反映する。
+// 先に arena_rating_history へ INSERT してから arena_ratings を UPDATE する
+// （UNIQUE(scope, ref_id, game_id, user_id) が二重反映の最終防壁）。
+// 呼び出し元が BEGIN IMMEDIATE トランザクションで囲むこと（R2で実装予定）。
 function arenaApplyEloForScope(
     PDO $db,
-    int $matchId,
-    int $scopeGameId,
+    string $scope,
+    int $refId,
+    int $gameId,
     int $winnerId,
     string $winnerName,
     int $loserId,
     string $loserName
 ): void {
-    $winner = arenaGetOrCreateRating($db, $scopeGameId, $winnerId, $winnerName);
-    $loser  = arenaGetOrCreateRating($db, $scopeGameId, $loserId, $loserName);
+    $winner = arenaGetOrCreateRating($db, $gameId, $winnerId, $winnerName);
+    $loser  = arenaGetOrCreateRating($db, $gameId, $loserId, $loserName);
 
     $winnerPlayed = (int)$winner['wins'] + (int)$winner['losses'];
     $loserPlayed  = (int)$loser['wins'] + (int)$loser['losses'];
@@ -99,84 +104,13 @@ function arenaApplyEloForScope(
 
     $now = time();
 
-    // history へ先に INSERT（UNIQUE(match_id, game_id, user_id) が二重反映の最終防壁）
     $histStmt = $db->prepare('
-        INSERT INTO arena_rating_history (match_id, game_id, user_id, opponent_id, rating_before, rating_after, result, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO arena_rating_history (scope, ref_id, game_id, user_id, opponent_id, rating_before, rating_after, result, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ');
-    $histStmt->execute([$matchId, $scopeGameId, $winnerId, $loserId, (float)$winner['rating'], $winnerAfter, 'win', $now]);
-    $histStmt->execute([$matchId, $scopeGameId, $loserId, $winnerId, (float)$loser['rating'], $loserAfter, 'loss', $now]);
+    $histStmt->execute([$scope, $refId, $gameId, $winnerId, $loserId, (float)$winner['rating'], $winnerAfter, 'win', $now]);
+    $histStmt->execute([$scope, $refId, $gameId, $loserId, $winnerId, (float)$loser['rating'], $loserAfter, 'loss', $now]);
 
-    arenaUpdateRatingRow($db, $scopeGameId, $winnerId, $winnerName, $winnerAfter, true, $now);
-    arenaUpdateRatingRow($db, $scopeGameId, $loserId, $loserName, $loserAfter, false, $now);
-}
-
-// 結果を確定する（Elo反映 + status='finished'）。$confirmerId は承認者
-// （自動承認の場合はもう一方のプレイヤーのID）。
-// status が 'reported' でなければ何もせず現状の match をそのまま返す（二重反映防止）。
-function arenaApplyMatchResult(PDO $db, array $match, int $confirmerId): array {
-    if ($match['status'] !== 'reported') {
-        return $match;
-    }
-
-    $winnerSide = $match['winner_side'];
-    $playerAId  = (int)$match['player_a_id'];
-    $playerBId  = $match['player_b_id'] !== null ? (int)$match['player_b_id'] : null;
-    if (!in_array($winnerSide, ['A', 'B'], true) || $playerBId === null) {
-        // データ不整合。確定させずそのまま返す（通常は発生しない防御的分岐）
-        return $match;
-    }
-
-    $gameId     = (int)$match['game_id'];
-    $winnerId   = $winnerSide === 'A' ? $playerAId : $playerBId;
-    $loserId    = $winnerSide === 'A' ? $playerBId : $playerAId;
-    $winnerName = $winnerSide === 'A' ? (string)$match['player_a_name'] : (string)$match['player_b_name'];
-    $loserName  = $winnerSide === 'A' ? (string)$match['player_b_name'] : (string)$match['player_a_name'];
-
-    $db->exec('BEGIN IMMEDIATE');
-    try {
-        // ロック取得後に再確認（他リクエストが直前に確定させていないか。TOCTOU対策）
-        $checkStmt = $db->prepare('SELECT status FROM arena_matches WHERE id = ?');
-        $checkStmt->execute([(int)$match['id']]);
-        $freshStatus = $checkStmt->fetchColumn();
-        if ($freshStatus !== 'reported') {
-            $db->exec('ROLLBACK');
-            return arenaLoadMatch($db, $match['public_id']) ?? $match;
-        }
-
-        arenaApplyEloForScope($db, (int)$match['id'], $gameId, $winnerId, $winnerName, $loserId, $loserName);
-        arenaApplyEloForScope($db, (int)$match['id'], 0, $winnerId, $winnerName, $loserId, $loserName);
-
-        $now = time();
-        $db->prepare("UPDATE arena_matches SET status = 'finished', confirmed_by = ?, finished_at = ?, updated_at = ? WHERE id = ?")
-           ->execute([$confirmerId, $now, $now, (int)$match['id']]);
-
-        $db->exec('COMMIT');
-    } catch (Throwable $e) {
-        $db->exec('ROLLBACK');
-        throw $e;
-    }
-
-    return arenaLoadMatch($db, $match['public_id']) ?? $match;
-}
-
-// 48時間経過した reported を自動承認する（遅延評価。cronは使わず、次にこの試合が
-// 読まれたリクエストの中で判定する）。まだ48時間経っていなければ何もしない。
-function arenaMaybeAutoConfirm(PDO $db, array $match): array {
-    if ($match['status'] !== 'reported') {
-        return $match;
-    }
-    if ((time() - (int)$match['updated_at']) < ARENA_RESULT_AUTO_CONFIRM_SECONDS) {
-        return $match;
-    }
-
-    $reportedBy = (int)$match['reported_by'];
-    $playerAId  = (int)$match['player_a_id'];
-    $playerBId  = $match['player_b_id'] !== null ? (int)$match['player_b_id'] : null;
-    $opponentId = $reportedBy === $playerAId ? $playerBId : $playerAId;
-    if ($opponentId === null) {
-        return $match;
-    }
-
-    return arenaApplyMatchResult($db, $match, $opponentId);
+    arenaUpdateRatingRow($db, $gameId, $winnerId, $winnerName, $winnerAfter, true, $now);
+    arenaUpdateRatingRow($db, $gameId, $loserId, $loserName, $loserAfter, false, $now);
 }

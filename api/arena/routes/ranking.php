@@ -1,17 +1,25 @@
 <?php
-// Phase 3: /v1/ranking, /v1/players/{user_id}, /v1/head-to-head ハンドラ。
-// Phase 5 以降は arenaActor($db, 'read') を通す（セッション or read/write スコープの
+// /v1/ranking, /v1/players/{user_id}, /v1/head-to-head ハンドラ。
+// すべて arenaActor($db, 'read') を通す（セッション or read/write スコープの
 // APIキー必須）。Arena配下のフロントルートは元々すべてログイン必須のため、
 // ブラウザから見た挙動はこれまでと変わらない。
+//
+// ★R1時点の注意：結果申告・Elo反映（旧 arenaApplyMatchResult 相当）はR2で実装する。
+// そのため arena_ratings / arena_rating_history はまだ実際には書き込まれず、
+// 以下のエンドポイントは配線だけ済ませてあり実質空のデータを返す。
+// game_id の意味は db.php のコメントの通り：正の値=タイトル別 / 0=総合 / -1=シリーズ別。
 
-// GET /v1/ranking?game={slug|overall} — リーダーボード（read スコープのAPIキーも可）
+// GET /v1/ranking?game={slug|overall|series} — リーダーボード（read スコープのAPIキーも可）
 function arenaHandleRanking(array $params, PDO $db): void {
     arenaActor($db, 'read');
-    $gameParam = trim((string)($_GET['game'] ?? 'overall'));
+    $gameParam = trim((string)($_GET['game'] ?? ($_GET['scope'] ?? 'overall')));
 
     if ($gameParam === '' || $gameParam === 'overall') {
         $gameId = 0;
         $gameMeta = ['slug' => 'overall', 'name' => '総合', 'icon' => '🏆'];
+    } elseif ($gameParam === 'series') {
+        $gameId = -1;
+        $gameMeta = ['slug' => 'series', 'name' => 'シリーズ', 'icon' => '🎴'];
     } else {
         $stmt = $db->prepare('SELECT id, slug, name, icon FROM arena_games WHERE slug = ?');
         $stmt->execute([$gameParam]);
@@ -50,7 +58,8 @@ function arenaHandleRanking(array $params, PDO $db): void {
     jsonResponse(['success' => true, 'game' => $gameMeta, 'ranking' => $rows]);
 }
 
-// GET /v1/players/{user_id} — 個人成績・レート一覧・直近試合（read スコープのAPIキーも可）
+// GET /v1/players/{user_id} — 個人成績・レート一覧（read スコープのAPIキーも可）
+// 直近シリーズの一覧はR2（結果申告・Elo反映）実装後に追加する。
 function arenaHandlePlayer(array $params, PDO $db): void {
     arenaActor($db, 'read');
     $userId = (int)($params['id'] ?? 0);
@@ -61,16 +70,23 @@ function arenaHandlePlayer(array $params, PDO $db): void {
         FROM arena_ratings r
         LEFT JOIN arena_games g ON g.id = r.game_id
         WHERE r.user_id = ?
-        ORDER BY (r.game_id = 0) DESC, g.name
+        ORDER BY (r.game_id = 0) DESC, (r.game_id = -1) DESC, g.name
     ');
     $stmt->execute([$userId]);
     $ratings = array_map(function ($r) {
-        $isOverall = (int)$r['game_id'] === 0;
+        $gid = (int)$r['game_id'];
+        if ($gid === 0) {
+            [$slug, $name, $icon] = ['overall', '総合', '🏆'];
+        } elseif ($gid === -1) {
+            [$slug, $name, $icon] = ['series', 'シリーズ', '🎴'];
+        } else {
+            [$slug, $name, $icon] = [$r['game_slug'], $r['game_name'], $r['game_icon']];
+        }
         return [
-            'game_id'     => (int)$r['game_id'],
-            'game_slug'   => $isOverall ? 'overall' : $r['game_slug'],
-            'game_name'   => $isOverall ? '総合' : $r['game_name'],
-            'game_icon'   => $isOverall ? '🏆' : $r['game_icon'],
+            'game_id'     => $gid,
+            'game_slug'   => $slug,
+            'game_name'   => $name,
+            'game_icon'   => $icon,
             'rating'      => round((float)$r['rating'], 1),
             'wins'        => (int)$r['wins'],
             'losses'      => (int)$r['losses'],
@@ -79,25 +95,11 @@ function arenaHandlePlayer(array $params, PDO $db): void {
         ];
     }, $stmt->fetchAll());
 
-    $matchStmt = $db->prepare("
-        SELECT * FROM arena_matches
-        WHERE (player_a_id = ? OR player_b_id = ?) AND status = 'finished'
-        ORDER BY finished_at DESC LIMIT 20
-    ");
-    $matchStmt->execute([$userId, $userId]);
-    $recent = array_map(function ($m) use ($db) {
-        // 一覧なので series サマリは省略（series_id 自体は含まれる）
-        return arenaSerializeMatch($db, $m, false);
-    }, $matchStmt->fetchAll());
-
-    jsonResponse(['success' => true, 'user_id' => $userId, 'ratings' => $ratings, 'recent_matches' => $recent]);
+    jsonResponse(['success' => true, 'user_id' => $userId, 'ratings' => $ratings, 'recent_series' => []]);
 }
 
-// GET /v1/head-to-head?a={id}&b={id} — 対戦相手別の戦績（arena_matches から集計、専用テーブルは持たない）。
-// Phase 6: ゲーム別の内訳・連勝連敗（現在のストリーク）・直近試合ごとのBAN/PICK内訳を追加。
-// 「直近試合一覧」は表示件数を絞るが、通算成績・ゲーム別内訳・ストリークは全履歴から計算する。
-const ARENA_H2H_RECENT_LIMIT = 30;
-
+// GET /v1/head-to-head?a={id}&b={id} — 対戦相手別の戦績（arena_series から集計、専用テーブルは持たない）。
+// R2でシリーズ確定（arena_series.winner_side の反映）が実装されるまでは常に0件になる。
 function arenaHandleHeadToHead(array $params, PDO $db): void {
     arenaActor($db, 'read');
     $a = (int)($_GET['a'] ?? 0);
@@ -107,136 +109,44 @@ function arenaHandleHeadToHead(array $params, PDO $db): void {
     }
 
     $stmt = $db->prepare("
-        SELECT m.*, g.slug AS game_slug, g.name AS game_name, g.icon AS game_icon
-        FROM arena_matches m
-        LEFT JOIN arena_games g ON g.id = m.game_id
-        WHERE m.status = 'finished'
-          AND ((m.player_a_id = ? AND m.player_b_id = ?) OR (m.player_a_id = ? AND m.player_b_id = ?))
-        ORDER BY m.finished_at DESC
+        SELECT public_id, winner_side, side_a_user_id, side_b_user_id, finished_at
+        FROM arena_series
+        WHERE status = 'finished'
+          AND ((player1_id = ? AND player2_id = ?) OR (player1_id = ? AND player2_id = ?))
+        ORDER BY finished_at DESC
     ");
     $stmt->execute([$a, $b, $b, $a]);
     $rows = $stmt->fetchAll();
 
     $aWins = 0;
     $bWins = 0;
-    $perGame = []; // slug => ['game_slug','game_name','game_icon','a_wins','b_wins','total']
-    // rows は finished_at 降順（最新が先頭）。streak は先頭から同じ勝者が続く間だけ
-    // 数え、食い違った時点で確定する（＝現在の連勝/連敗）。
-    $streakSide = null; // 'a' | 'b' | null（対戦履歴なし）
-    $streakCount = 0;
-    $streakDone = false;
-
+    $series = [];
     foreach ($rows as $row) {
-        $aIsPlayerA = (int)$row['player_a_id'] === $a;
-        $aWon = ($aIsPlayerA && $row['winner_side'] === 'A') || (!$aIsPlayerA && $row['winner_side'] === 'B');
-        $side = $aWon ? 'a' : 'b';
-
-        if ($aWon) {
+        $winnerId = null;
+        if ($row['winner_side'] === 'A') {
+            $winnerId = $row['side_a_user_id'] !== null ? (int)$row['side_a_user_id'] : null;
+        } elseif ($row['winner_side'] === 'B') {
+            $winnerId = $row['side_b_user_id'] !== null ? (int)$row['side_b_user_id'] : null;
+        }
+        if ($winnerId === $a) {
             $aWins++;
-        } else {
+        } elseif ($winnerId === $b) {
             $bWins++;
         }
-
-        $gSlug = $row['game_slug'] ?? '?';
-        if (!isset($perGame[$gSlug])) {
-            $perGame[$gSlug] = [
-                'game_slug' => $gSlug,
-                'game_name' => $row['game_name'],
-                'game_icon' => $row['game_icon'],
-                'a_wins'    => 0,
-                'b_wins'    => 0,
-                'total'     => 0,
-            ];
-        }
-        $perGame[$gSlug]['total']++;
-        if ($aWon) {
-            $perGame[$gSlug]['a_wins']++;
-        } else {
-            $perGame[$gSlug]['b_wins']++;
-        }
-
-        if (!$streakDone) {
-            if ($streakSide === null) {
-                $streakSide = $side;
-                $streakCount = 1;
-            } elseif ($side === $streakSide) {
-                $streakCount++;
-            } else {
-                $streakDone = true;
-            }
-        }
-    }
-
-    // 直近試合（表示件数を絞る）のBAN/PICK内訳をグループ化SQLで1本にまとめて取得（N+1回避）
-    $recentRows = array_slice($rows, 0, ARENA_H2H_RECENT_LIMIT);
-    $actionsByMatch = [];
-    if (!empty($recentRows)) {
-        $matchIds = array_map(function ($r) {
-            return (int)$r['id'];
-        }, $recentRows);
-        $placeholders = implode(',', array_fill(0, count($matchIds), '?'));
-        $actStmt = $db->prepare("
-            SELECT a.match_id, a.seq, a.action, a.side, a.entry_id, e.slug AS entry_slug, e.name AS entry_name
-            FROM arena_actions a
-            LEFT JOIN arena_entries e ON e.id = a.entry_id
-            WHERE a.match_id IN ($placeholders) AND a.entry_id IS NOT NULL
-            ORDER BY a.match_id, a.seq
-        ");
-        $actStmt->execute($matchIds);
-        foreach ($actStmt->fetchAll() as $r) {
-            $actionsByMatch[(int)$r['match_id']][] = $r;
-        }
-    }
-
-    $matches = [];
-    foreach ($recentRows as $row) {
-        $aIsPlayerA = (int)$row['player_a_id'] === $a;
-        $aWon = ($aIsPlayerA && $row['winner_side'] === 'A') || (!$aIsPlayerA && $row['winner_side'] === 'B');
-
-        $picksA = [];
-        $picksB = [];
-        $bans = [];
-        foreach ($actionsByMatch[(int)$row['id']] ?? [] as $act) {
-            $entry = ['entry_id' => (int)$act['entry_id'], 'slug' => $act['entry_slug'], 'name' => $act['entry_name']];
-            if ($act['action'] === 'ban') {
-                $bans[] = $entry;
-            } elseif ($act['side'] === 'A') {
-                $picksA[] = $entry;
-            } else {
-                $picksB[] = $entry;
-            }
-        }
-        // player_a/player_b（試合内の実際のサイド）を a/b 引数の視点に並べ替える
-        $aPicks = $aIsPlayerA ? $picksA : $picksB;
-        $bPicks = $aIsPlayerA ? $picksB : $picksA;
-
-        $matches[] = [
+        $series[] = [
             'public_id'   => $row['public_id'],
-            'mode'        => $row['mode'],
-            'game_slug'   => $row['game_slug'],
-            'game_name'   => $row['game_name'],
-            'game_icon'   => $row['game_icon'],
-            'winner_side' => $row['winner_side'],
-            'a_won'       => $aWon,
-            'score_a'     => (int)$row['score_a'],
-            'score_b'     => (int)$row['score_b'],
+            'winner_id'   => $winnerId,
             'finished_at' => $row['finished_at'] !== null ? (int)$row['finished_at'] : null,
-            'series_id'   => $row['series_id'],
-            'a_picks'     => $aPicks,
-            'b_picks'     => $bPicks,
-            'bans'        => $bans,
         ];
     }
 
     jsonResponse([
-        'success'  => true,
-        'a'        => $a,
-        'b'        => $b,
-        'a_wins'   => $aWins,
-        'b_wins'   => $bWins,
-        'total'    => count($rows),
-        'streak'   => ['side' => $streakSide, 'count' => $streakCount],
-        'per_game' => array_values($perGame),
-        'matches'  => $matches,
+        'success' => true,
+        'a'       => $a,
+        'b'       => $b,
+        'a_wins'  => $aWins,
+        'b_wins'  => $bWins,
+        'total'   => count($rows),
+        'series'  => $series,
     ]);
 }

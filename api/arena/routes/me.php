@@ -6,7 +6,7 @@ function arenaHandleMeGamesGet(array $params, PDO $db): void {
     $user = arenaActor($db, 'read');
 
     $stmt = $db->prepare('
-        SELECT g.id, g.slug, g.name, g.entry_label, g.icon
+        SELECT g.id, g.slug, g.name, g.icon
         FROM arena_user_games ug
         JOIN arena_games g ON g.id = ug.game_id
         WHERE ug.user_id = ?
@@ -15,11 +15,10 @@ function arenaHandleMeGamesGet(array $params, PDO $db): void {
     $stmt->execute([$user['id']]);
     $games = array_map(function ($g) {
         return [
-            'id'          => (int)$g['id'],
-            'slug'        => $g['slug'],
-            'name'        => $g['name'],
-            'entry_label' => $g['entry_label'],
-            'icon'        => $g['icon'],
+            'id'    => (int)$g['id'],
+            'slug'  => $g['slug'],
+            'name'  => $g['name'],
+            'icon'  => $g['icon'],
         ];
     }, $stmt->fetchAll());
 

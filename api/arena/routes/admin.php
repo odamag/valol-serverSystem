@@ -1,7 +1,11 @@
 <?php
-// Phase 2: 管理者専用ハンドラ（ゲームマスタ管理・所持ゲームとは別枠）。
+// 管理者専用ハンドラ（ゲームマスタ / タイトルドラフト書式の管理。所持ゲームとは別枠）。
 // すべてのハンドラは冒頭で requireArenaAdmin($db) を呼ぶ。
 // ここから作成・更新される行はすべて source='user' とし、created_by/updated_by/updated_at を残す。
+//
+// セクション12の再設計により、エントリー/ルールセット（キャラクター単位のCRUD）は廃止し、
+// 代わりにタイトルドラフト書式（arena_formats）のCRUDを置く。ゲームのCRUDは
+// entry_label/entry_source が無くなった以外はそのまま踏襲する。
 
 // ── 共通ヘルパー ─────────────────────────────────────────────────
 
@@ -34,32 +38,6 @@ function arenaValidateSlug(string $slug): ?string {
     return null;
 }
 
-// ルールセットの sequence を検証する。空でない JSON 配列で、各要素が
-// {"t":"ban"|"pick","s":"A"|"B"} の形であることを要求する。
-function arenaValidateSequence($seq): ?string {
-    if (!is_array($seq) || empty($seq) || array_keys($seq) !== range(0, count($seq) - 1)) {
-        return 'sequence は空でない配列（BAN/PICKの手順リスト）で指定してください';
-    }
-    foreach ($seq as $step) {
-        if (!is_array($step)) {
-            return 'sequence の各要素はオブジェクト {"t":"ban|pick","s":"A|B"} にしてください';
-        }
-        $extra = array_diff(array_keys($step), ['t', 's']);
-        if (!empty($extra)) {
-            return 'sequence の要素に不明なキーがあります: ' . implode(', ', $extra);
-        }
-        $t = $step['t'] ?? null;
-        $s = $step['s'] ?? null;
-        if (!in_array($t, ['ban', 'pick'], true)) {
-            return 'sequence の "t" は "ban" か "pick" にしてください';
-        }
-        if (!in_array($s, ['A', 'B'], true)) {
-            return 'sequence の "s" は "A" か "B" にしてください';
-        }
-    }
-    return null;
-}
-
 // 名前からスラッグを自動生成する。ASCII に変換できる部分だけを使い、
 // 日本語などで空になった場合は名前のハッシュから安定したスラッグを作る
 // （同じ名前なら常に同じスラッグになるので UNIQUE 制約と両立する）。
@@ -81,6 +59,24 @@ function arenaBoolToInt($v): int {
     return !empty($v) ? 1 : 0;
 }
 
+// turn_seconds を検証し、有効なら整数を、無効なら null を返す（0〜600の整数のみ許可）
+function arenaValidateTurnSeconds($value): ?int {
+    if (is_bool($value) || !is_numeric($value)) {
+        return null;
+    }
+    if (is_string($value) && !preg_match('/^-?\d+$/', trim($value))) {
+        return null; // "30.5" のような小数文字列は拒否
+    }
+    if (is_float($value) && floor($value) !== $value) {
+        return null; // 30.5 のような小数は拒否
+    }
+    $n = (int)$value;
+    if ($n < 0 || $n > 600) {
+        return null;
+    }
+    return $n;
+}
+
 // slug からゲームを引く（管理系は enabled=0 のゲームも編集できるよう絞り込まない）
 function arenaFindGameBySlug(PDO $db, string $slug): ?array {
     $stmt = $db->prepare('SELECT * FROM arena_games WHERE slug = ?');
@@ -89,28 +85,21 @@ function arenaFindGameBySlug(PDO $db, string $slug): ?array {
     return $row ?: null;
 }
 
-function arenaFindEntryById(PDO $db, int $id): ?array {
-    $stmt = $db->prepare('SELECT * FROM arena_entries WHERE id = ?');
+function arenaFindFormatById(PDO $db, int $id): ?array {
+    $stmt = $db->prepare('SELECT * FROM arena_formats WHERE id = ?');
     $stmt->execute([$id]);
     $row = $stmt->fetch();
     return $row ?: null;
 }
 
-function arenaFindRulesetById(PDO $db, int $id): ?array {
-    $stmt = $db->prepare('SELECT * FROM arena_rulesets WHERE id = ?');
-    $stmt->execute([$id]);
-    $row = $stmt->fetch();
-    return $row ?: null;
-}
-
-// ── ゲーム ───────────────────────────────────────────────────────
+// ── ゲーム（タイトルマスタ） ─────────────────────────────────────
 
 // POST /v1/admin/games
 function arenaHandleAdminGameCreate(array $params, PDO $db): void {
     $admin = requireArenaAdmin($db);
     $body  = arenaReadJsonBody();
 
-    $allowed = ['slug', 'name', 'entry_label', 'icon', 'sort_order', 'entry_source'];
+    $allowed = ['slug', 'name', 'icon', 'sort_order'];
     if ($err = arenaCheckAllowedFields($body, $allowed)) {
         jsonResponse(['success' => false, 'message' => $err], 400);
     }
@@ -125,11 +114,6 @@ function arenaHandleAdminGameCreate(array $params, PDO $db): void {
         jsonResponse(['success' => false, 'message' => $err], 400);
     }
 
-    $entrySource = (string)($body['entry_source'] ?? 'manual');
-    if (!in_array($entrySource, ['manual', 'ddragon'], true)) {
-        jsonResponse(['success' => false, 'message' => 'entry_source は "manual" か "ddragon" にしてください'], 400);
-    }
-
     if (arenaFindGameBySlug($db, $slug)) {
         jsonResponse(['success' => false, 'message' => 'そのスラッグのゲームは既に存在します'], 409);
     }
@@ -137,17 +121,15 @@ function arenaHandleAdminGameCreate(array $params, PDO $db): void {
     $now = time();
     $stmt = $db->prepare('
         INSERT INTO arena_games
-            (slug, name, entry_label, icon, sort_order, entry_source, source, enabled, created_by, updated_by, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, \'user\', 1, ?, ?, ?, ?)
+            (slug, name, icon, sort_order, source, enabled, created_by, updated_by, created_at, updated_at)
+        VALUES (?, ?, ?, ?, \'user\', 1, ?, ?, ?, ?)
     ');
     try {
         $stmt->execute([
             $slug,
             $name,
-            (string)($body['entry_label'] ?? 'キャラクター'),
             (string)($body['icon'] ?? ''),
             (int)($body['sort_order'] ?? 0),
-            $entrySource,
             $admin['id'],
             $admin['id'],
             $now,
@@ -171,7 +153,7 @@ function arenaHandleAdminGameUpdate(array $params, PDO $db): void {
     }
 
     $body = arenaReadJsonBody();
-    $allowed = ['slug', 'name', 'entry_label', 'icon', 'sort_order', 'entry_source', 'enabled'];
+    $allowed = ['slug', 'name', 'icon', 'sort_order', 'enabled'];
     if ($err = arenaCheckAllowedFields($body, $allowed)) {
         jsonResponse(['success' => false, 'message' => $err], 400);
     }
@@ -192,28 +174,20 @@ function arenaHandleAdminGameUpdate(array $params, PDO $db): void {
         jsonResponse(['success' => false, 'message' => 'ゲーム名を空にはできません'], 400);
     }
 
-    $entrySource = array_key_exists('entry_source', $body) ? (string)$body['entry_source'] : $game['entry_source'];
-    if (!in_array($entrySource, ['manual', 'ddragon'], true)) {
-        jsonResponse(['success' => false, 'message' => 'entry_source は "manual" か "ddragon" にしてください'], 400);
-    }
-
     $sortOrder = array_key_exists('sort_order', $body) ? (int)$body['sort_order'] : (int)$game['sort_order'];
     $enabled   = array_key_exists('enabled', $body) ? arenaBoolToInt($body['enabled']) : (int)$game['enabled'];
 
     $stmt = $db->prepare('
         UPDATE arena_games
-        SET slug = ?, name = ?, entry_label = ?, icon = ?, sort_order = ?, entry_source = ?,
-            enabled = ?, source = \'user\', updated_by = ?, updated_at = ?
+        SET slug = ?, name = ?, icon = ?, sort_order = ?, enabled = ?, source = \'user\', updated_by = ?, updated_at = ?
         WHERE id = ?
     ');
     try {
         $stmt->execute([
             $newSlug,
             $name,
-            (string)($body['entry_label'] ?? $game['entry_label']),
             (string)($body['icon'] ?? $game['icon']),
             $sortOrder,
-            $entrySource,
             $enabled,
             $admin['id'],
             time(),
@@ -241,319 +215,68 @@ function arenaHandleAdminGameDelete(array $params, PDO $db): void {
     jsonResponse(['success' => true]);
 }
 
-// ── エントリー ───────────────────────────────────────────────────
+// ── タイトルドラフト書式（arena_formats） ────────────────────────
 
-// POST /v1/admin/games/{slug}/entries — 1件追加（UPSERT）
-function arenaHandleAdminEntryCreate(array $params, PDO $db): void {
+// GET /v1/admin/formats
+function arenaHandleAdminFormatsList(array $params, PDO $db): void {
+    requireArenaAdmin($db);
+    $stmt = $db->query('SELECT * FROM arena_formats ORDER BY is_default DESC, name');
+    $formats = array_map('arenaSerializeFormatRow', $stmt->fetchAll());
+    jsonResponse(['success' => true, 'formats' => $formats]);
+}
+
+// POST /v1/admin/formats
+function arenaHandleAdminFormatCreate(array $params, PDO $db): void {
     $admin = requireArenaAdmin($db);
-    $slug  = $params['slug'] ?? '';
-    $game  = arenaFindGameBySlug($db, $slug);
-    if (!$game) {
-        jsonResponse(['success' => false, 'message' => 'ゲームが見つかりません'], 404);
-    }
+    $body  = arenaReadJsonBody();
 
-    $body = arenaReadJsonBody();
-    $allowed = ['slug', 'name', 'image_url', 'tags'];
+    $allowed = ['slug', 'name', 'sequence', 'pool_size', 'wins_needed', 'turn_seconds', 'is_default'];
     if ($err = arenaCheckAllowedFields($body, $allowed)) {
         jsonResponse(['success' => false, 'message' => $err], 400);
     }
 
     $name = trim((string)($body['name'] ?? ''));
     if ($name === '') {
-        jsonResponse(['success' => false, 'message' => '名前を入力してください'], 400);
+        jsonResponse(['success' => false, 'message' => 'フォーマット名を入力してください'], 400);
     }
 
-    $entrySlug = isset($body['slug']) && $body['slug'] !== '' ? (string)$body['slug'] : arenaSlugify($name);
-    if ($err = arenaValidateSlug($entrySlug)) {
+    $poolSize   = isset($body['pool_size']) ? (int)$body['pool_size'] : 0;
+    $winsNeeded = isset($body['wins_needed']) ? (int)$body['wins_needed'] : 0;
+    $sequence   = isset($body['sequence']) && is_array($body['sequence']) ? $body['sequence'] : [];
+    if ($err = arenaValidateFormatSequence($sequence, $poolSize, $winsNeeded)) {
         jsonResponse(['success' => false, 'message' => $err], 400);
     }
 
-    $now = time();
-    $stmt = $db->prepare('
-        INSERT INTO arena_entries
-            (game_id, slug, name, image_url, tags, source, enabled, created_by, updated_by, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, \'user\', 1, ?, ?, ?, ?)
-        ON CONFLICT(game_id, slug) DO UPDATE SET
-            name = excluded.name, image_url = excluded.image_url, tags = excluded.tags,
-            source = \'user\', enabled = 1, updated_by = excluded.updated_by, updated_at = excluded.updated_at
-    ');
-    $stmt->execute([
-        (int)$game['id'],
-        $entrySlug,
-        $name,
-        (string)($body['image_url'] ?? ''),
-        (string)($body['tags'] ?? ''),
-        $admin['id'],
-        $admin['id'],
-        $now,
-        $now,
-    ]);
-
-    $entryStmt = $db->prepare('SELECT * FROM arena_entries WHERE game_id = ? AND slug = ?');
-    $entryStmt->execute([(int)$game['id'], $entrySlug]);
-    jsonResponse(['success' => true, 'entry' => $entryStmt->fetch()]);
-}
-
-// POST /v1/admin/games/{slug}/entries/import — 一括投入
-// 改行区切りの名前リスト、または JSON 配列（文字列 or {name,slug?,image_url?,tags?} オブジェクト）を受け付ける
-function arenaHandleAdminEntryImport(array $params, PDO $db): void {
-    $admin = requireArenaAdmin($db);
-    $slug  = $params['slug'] ?? '';
-    $game  = arenaFindGameBySlug($db, $slug);
-    if (!$game) {
-        jsonResponse(['success' => false, 'message' => 'ゲームが見つかりません'], 404);
-    }
-
-    $raw     = file_get_contents('php://input');
-    $decoded = json_decode($raw, true);
-
-    // 受け付ける形式:
-    //   1. 改行区切りのプレーンテキスト（管理画面の一括インポートはこれを送る）
-    //   2. JSON配列  ["リュウ", ...] / [{"name":"リュウ", ...}, ...]
-    //   3. JSONオブジェクト {"text":"改行区切り"} / {"names":[...]}（ボット等から扱いやすい形）
-    // JSONオブジェクトを配列としてそのまま舐めると、値が丸ごと1件の名前になって
-    // 改行入りの壊れたエントリーが黙って作られるため、明示的に分岐する。
-    $items = [];
-    if (is_array($decoded)) {
-        $isList = ($decoded === []) || (array_keys($decoded) === range(0, count($decoded) - 1));
-        if ($isList) {
-            $source = $decoded;
-        } elseif (isset($decoded['text']) && is_string($decoded['text'])) {
-            $source = preg_split('/\r\n|\r|\n/', $decoded['text']);
-        } elseif (isset($decoded['names']) && is_array($decoded['names'])) {
-            $source = $decoded['names'];
-        } else {
-            jsonResponse([
-                'success' => false,
-                'message' => 'インポート形式が不正です（配列、{"text":"改行区切り"}、{"names":[...]} のいずれか）',
-            ], 400);
-            return;
-        }
-        foreach ($source as $entry) {
-            if (is_string($entry)) {
-                $items[] = ['name' => $entry];
-            } elseif (is_array($entry) && isset($entry['name']) && is_string($entry['name'])) {
-                $items[] = $entry;
-            }
-        }
-    } else {
-        foreach (preg_split('/\r\n|\r|\n/', (string)$raw) as $line) {
-            $items[] = ['name' => $line];
-        }
-    }
-
-    // どの経路で来ても、改行を含む名前は行ごとに分割し、空行は捨てる。
-    $normalized = [];
-    foreach ($items as $item) {
-        foreach (preg_split('/\r\n|\r|\n/', (string)$item['name']) as $line) {
-            $line = trim($line);
-            if ($line === '') {
-                continue;
-            }
-            if (mb_strlen($line) > 100) {
-                jsonResponse([
-                    'success' => false,
-                    'message' => '名前が長すぎます（100文字以内）: ' . mb_substr($line, 0, 20) . '…',
-                ], 400);
-                return;
-            }
-            $row = $item;
-            $row['name'] = $line;
-            $normalized[] = $row;
-        }
-    }
-    $items = $normalized;
-
-    if (empty($items)) {
-        jsonResponse(['success' => false, 'message' => 'インポートするデータがありません'], 400);
-    }
-
-    $now = time();
-    $gameId = (int)$game['id'];
-    $stmt = $db->prepare('
-        INSERT INTO arena_entries
-            (game_id, slug, name, image_url, tags, source, enabled, created_by, updated_by, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, \'user\', 1, ?, ?, ?, ?)
-        ON CONFLICT(game_id, slug) DO UPDATE SET
-            name = excluded.name, image_url = excluded.image_url, tags = excluded.tags,
-            source = \'user\', enabled = 1, updated_by = excluded.updated_by, updated_at = excluded.updated_at
-    ');
-
-    $imported = 0;
-    $db->beginTransaction();
-    try {
-        $usedSlugs = [];
-        foreach ($items as $item) {
-            $name = trim((string)($item['name'] ?? ''));
-            if ($name === '') {
-                continue;
-            }
-            $entrySlug = !empty($item['slug']) && arenaValidateSlug((string)$item['slug']) === null
-                ? (string)$item['slug']
-                : arenaSlugify($name);
-            // 同一バッチ内でスラッグが衝突した場合はハッシュにフォールバックして取りこぼしを防ぐ
-            if (isset($usedSlugs[$entrySlug])) {
-                $entrySlug = 'e' . substr(hash('sha1', $name . '#' . $imported), 0, 10);
-            }
-            $usedSlugs[$entrySlug] = true;
-
-            $stmt->execute([
-                $gameId,
-                $entrySlug,
-                $name,
-                (string)($item['image_url'] ?? ''),
-                (string)($item['tags'] ?? ''),
-                $admin['id'],
-                $admin['id'],
-                $now,
-                $now,
-            ]);
-            $imported++;
-        }
-        $db->commit();
-    } catch (Throwable $e) {
-        if ($db->inTransaction()) {
-            $db->rollBack();
-        }
-        throw $e;
-    }
-
-    jsonResponse(['success' => true, 'imported' => $imported]);
-}
-
-// PATCH /v1/admin/entries/{id}
-function arenaHandleAdminEntryUpdate(array $params, PDO $db): void {
-    $admin = requireArenaAdmin($db);
-    $id    = (int)($params['id'] ?? 0);
-    $entry = arenaFindEntryById($db, $id);
-    if (!$entry) {
-        jsonResponse(['success' => false, 'message' => 'エントリーが見つかりません'], 404);
-    }
-
-    $body = arenaReadJsonBody();
-    $allowed = ['slug', 'name', 'image_url', 'tags', 'enabled'];
-    if ($err = arenaCheckAllowedFields($body, $allowed)) {
-        jsonResponse(['success' => false, 'message' => $err], 400);
-    }
-    if (empty($body)) {
-        jsonResponse(['success' => false, 'message' => '更新するフィールドを指定してください'], 400);
-    }
-
-    $newSlug = $entry['slug'];
-    if (array_key_exists('slug', $body)) {
-        $newSlug = (string)$body['slug'];
-        if ($err = arenaValidateSlug($newSlug)) {
-            jsonResponse(['success' => false, 'message' => $err], 400);
-        }
-    }
-
-    $name = array_key_exists('name', $body) ? trim((string)$body['name']) : $entry['name'];
-    if ($name === '') {
-        jsonResponse(['success' => false, 'message' => '名前を空にはできません'], 400);
-    }
-
-    $enabled = array_key_exists('enabled', $body) ? arenaBoolToInt($body['enabled']) : (int)$entry['enabled'];
-
-    $stmt = $db->prepare('
-        UPDATE arena_entries
-        SET slug = ?, name = ?, image_url = ?, tags = ?, enabled = ?, source = \'user\', updated_by = ?, updated_at = ?
-        WHERE id = ?
-    ');
-    try {
-        $stmt->execute([
-            $newSlug,
-            $name,
-            (string)($body['image_url'] ?? $entry['image_url']),
-            (string)($body['tags'] ?? $entry['tags']),
-            $enabled,
-            $admin['id'],
-            time(),
-            $id,
-        ]);
-    } catch (PDOException $e) {
-        jsonResponse(['success' => false, 'message' => 'そのスラッグのエントリーは既に存在します'], 409);
-    }
-
-    jsonResponse(['success' => true, 'entry' => arenaFindEntryById($db, $id)]);
-}
-
-// DELETE /v1/admin/entries/{id} — 論理削除のみ。過去のドラフト記録（arena_actions）が参照しているため物理削除はしない。
-function arenaHandleAdminEntryDelete(array $params, PDO $db): void {
-    $admin = requireArenaAdmin($db);
-    $id    = (int)($params['id'] ?? 0);
-    $entry = arenaFindEntryById($db, $id);
-    if (!$entry) {
-        jsonResponse(['success' => false, 'message' => 'エントリーが見つかりません'], 404);
-    }
-
-    $stmt = $db->prepare("UPDATE arena_entries SET enabled = 0, source = 'user', updated_by = ?, updated_at = ? WHERE id = ?");
-    $stmt->execute([$admin['id'], time(), $id]);
-
-    jsonResponse(['success' => true]);
-}
-
-// ── ルールセット ─────────────────────────────────────────────────
-
-// POST /v1/admin/games/{slug}/rulesets
-function arenaHandleAdminRulesetCreate(array $params, PDO $db): void {
-    $admin = requireArenaAdmin($db);
-    $slug  = $params['slug'] ?? '';
-    $game  = arenaFindGameBySlug($db, $slug);
-    if (!$game) {
-        jsonResponse(['success' => false, 'message' => 'ゲームが見つかりません'], 404);
-    }
-
-    $body = arenaReadJsonBody();
-    $allowed = ['slug', 'name', 'sequence', 'turn_seconds', 'mirror_allowed', 'fearless', 'is_default'];
-    if ($err = arenaCheckAllowedFields($body, $allowed)) {
-        jsonResponse(['success' => false, 'message' => $err], 400);
-    }
-
-    $name = trim((string)($body['name'] ?? ''));
-    if ($name === '') {
-        jsonResponse(['success' => false, 'message' => 'ルールセット名を入力してください'], 400);
-    }
-
-    if ($err = arenaValidateSequence($body['sequence'] ?? null)) {
-        jsonResponse(['success' => false, 'message' => $err], 400);
-    }
-
-    $turnSeconds = arenaValidateTurnSeconds($body['turn_seconds'] ?? 30);
+    $turnSeconds = arenaValidateTurnSeconds($body['turn_seconds'] ?? 0);
     if ($turnSeconds === null) {
         jsonResponse(['success' => false, 'message' => 'turn_seconds は 0〜600 の整数で指定してください'], 400);
     }
 
-    $rulesetSlug = isset($body['slug']) && $body['slug'] !== '' ? (string)$body['slug'] : arenaSlugify($name);
-    if ($err = arenaValidateSlug($rulesetSlug)) {
+    $slug = isset($body['slug']) && $body['slug'] !== '' ? (string)$body['slug'] : arenaSlugify($name);
+    if ($err = arenaValidateSlug($slug)) {
         jsonResponse(['success' => false, 'message' => $err], 400);
     }
 
     $isDefault = arenaBoolToInt($body['is_default'] ?? false);
     $now = time();
-    $gameId = (int)$game['id'];
 
     $db->beginTransaction();
     try {
         if ($isDefault) {
-            $db->prepare('UPDATE arena_rulesets SET is_default = 0 WHERE game_id = ?')->execute([$gameId]);
+            $db->exec('UPDATE arena_formats SET is_default = 0');
         }
         $stmt = $db->prepare('
-            INSERT INTO arena_rulesets
-                (game_id, slug, name, sequence, turn_seconds, mirror_allowed, fearless, is_default, source, enabled, created_by, updated_by, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, \'user\', 1, ?, ?, ?, ?)
-            ON CONFLICT(game_id, slug) DO UPDATE SET
-                name = excluded.name, sequence = excluded.sequence, turn_seconds = excluded.turn_seconds,
-                mirror_allowed = excluded.mirror_allowed, fearless = excluded.fearless, is_default = excluded.is_default,
-                source = \'user\', enabled = 1, updated_by = excluded.updated_by, updated_at = excluded.updated_at
+            INSERT INTO arena_formats
+                (slug, name, sequence, pool_size, wins_needed, turn_seconds, is_default, source, enabled, created_by, updated_by, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, \'user\', 1, ?, ?, ?, ?)
         ');
         $stmt->execute([
-            $gameId,
-            $rulesetSlug,
+            $slug,
             $name,
-            json_encode($body['sequence'], JSON_UNESCAPED_UNICODE),
+            json_encode($sequence, JSON_UNESCAPED_UNICODE),
+            $poolSize,
+            $winsNeeded,
             $turnSeconds,
-            arenaBoolToInt($body['mirror_allowed'] ?? false),
-            arenaBoolToInt($body['fearless'] ?? false),
             $isDefault,
             $admin['id'],
             $admin['id'],
@@ -561,47 +284,34 @@ function arenaHandleAdminRulesetCreate(array $params, PDO $db): void {
             $now,
         ]);
         $db->commit();
-    } catch (Throwable $e) {
+    } catch (PDOException $e) {
         if ($db->inTransaction()) {
             $db->rollBack();
         }
-        throw $e;
+        jsonResponse(['success' => false, 'message' => 'そのスラッグのフォーマットは既に存在します'], 409);
     }
 
-    $rsStmt = $db->prepare('SELECT * FROM arena_rulesets WHERE game_id = ? AND slug = ?');
-    $rsStmt->execute([$gameId, $rulesetSlug]);
-    jsonResponse(['success' => true, 'ruleset' => $rsStmt->fetch()]);
+    jsonResponse(['success' => true, 'format' => arenaSerializeFormatRow(arenaFindFormatBySlugForAdmin($db, $slug))]);
 }
 
-// turn_seconds を検証し、有効なら整数を、無効なら null を返す（0〜600の整数のみ許可）
-function arenaValidateTurnSeconds($value): ?int {
-    if (is_bool($value) || !is_numeric($value)) {
-        return null;
-    }
-    if (is_string($value) && !preg_match('/^-?\d+$/', trim($value))) {
-        return null; // "30.5" のような小数文字列は拒否
-    }
-    if (is_float($value) && floor($value) !== $value) {
-        return null; // 30.5 のような小数は拒否
-    }
-    $n = (int)$value;
-    if ($n < 0 || $n > 600) {
-        return null;
-    }
-    return $n;
+// arenaFindFormatById と違い、直後の INSERT/UPDATE の結果をそのまま返すためだけの内部ヘルパー
+function arenaFindFormatBySlugForAdmin(PDO $db, string $slug): array {
+    $stmt = $db->prepare('SELECT * FROM arena_formats WHERE slug = ?');
+    $stmt->execute([$slug]);
+    return $stmt->fetch();
 }
 
-// PATCH /v1/admin/rulesets/{id}
-function arenaHandleAdminRulesetUpdate(array $params, PDO $db): void {
-    $admin   = requireArenaAdmin($db);
-    $id      = (int)($params['id'] ?? 0);
-    $ruleset = arenaFindRulesetById($db, $id);
-    if (!$ruleset) {
-        jsonResponse(['success' => false, 'message' => 'ルールセットが見つかりません'], 404);
+// PATCH /v1/admin/formats/{id}
+function arenaHandleAdminFormatUpdate(array $params, PDO $db): void {
+    $admin  = requireArenaAdmin($db);
+    $id     = (int)($params['id'] ?? 0);
+    $format = arenaFindFormatById($db, $id);
+    if (!$format) {
+        jsonResponse(['success' => false, 'message' => 'フォーマットが見つかりません'], 404);
     }
 
     $body = arenaReadJsonBody();
-    $allowed = ['slug', 'name', 'sequence', 'turn_seconds', 'mirror_allowed', 'fearless', 'is_default', 'enabled'];
+    $allowed = ['slug', 'name', 'sequence', 'pool_size', 'wins_needed', 'turn_seconds', 'is_default', 'enabled'];
     if ($err = arenaCheckAllowedFields($body, $allowed)) {
         jsonResponse(['success' => false, 'message' => $err], 400);
     }
@@ -609,7 +319,7 @@ function arenaHandleAdminRulesetUpdate(array $params, PDO $db): void {
         jsonResponse(['success' => false, 'message' => '更新するフィールドを指定してください'], 400);
     }
 
-    $newSlug = $ruleset['slug'];
+    $newSlug = $format['slug'];
     if (array_key_exists('slug', $body)) {
         $newSlug = (string)$body['slug'];
         if ($err = arenaValidateSlug($newSlug)) {
@@ -617,20 +327,22 @@ function arenaHandleAdminRulesetUpdate(array $params, PDO $db): void {
         }
     }
 
-    $name = array_key_exists('name', $body) ? trim((string)$body['name']) : $ruleset['name'];
+    $name = array_key_exists('name', $body) ? trim((string)$body['name']) : $format['name'];
     if ($name === '') {
-        jsonResponse(['success' => false, 'message' => 'ルールセット名を空にはできません'], 400);
+        jsonResponse(['success' => false, 'message' => 'フォーマット名を空にはできません'], 400);
     }
 
-    $sequenceJson = $ruleset['sequence'];
-    if (array_key_exists('sequence', $body)) {
-        if ($err = arenaValidateSequence($body['sequence'])) {
-            jsonResponse(['success' => false, 'message' => $err], 400);
-        }
-        $sequenceJson = json_encode($body['sequence'], JSON_UNESCAPED_UNICODE);
+    $poolSize   = array_key_exists('pool_size', $body) ? (int)$body['pool_size'] : (int)$format['pool_size'];
+    $winsNeeded = array_key_exists('wins_needed', $body) ? (int)$body['wins_needed'] : (int)$format['wins_needed'];
+    $sequence   = array_key_exists('sequence', $body) && is_array($body['sequence'])
+        ? $body['sequence']
+        : (json_decode($format['sequence'], true) ?: []);
+
+    if ($err = arenaValidateFormatSequence($sequence, $poolSize, $winsNeeded)) {
+        jsonResponse(['success' => false, 'message' => $err], 400);
     }
 
-    $turnSeconds = (int)$ruleset['turn_seconds'];
+    $turnSeconds = (int)$format['turn_seconds'];
     if (array_key_exists('turn_seconds', $body)) {
         $turnSeconds = arenaValidateTurnSeconds($body['turn_seconds']);
         if ($turnSeconds === null) {
@@ -638,25 +350,22 @@ function arenaHandleAdminRulesetUpdate(array $params, PDO $db): void {
         }
     }
 
-    $mirrorAllowed = array_key_exists('mirror_allowed', $body) ? arenaBoolToInt($body['mirror_allowed']) : (int)$ruleset['mirror_allowed'];
-    $fearless      = array_key_exists('fearless', $body) ? arenaBoolToInt($body['fearless']) : (int)$ruleset['fearless'];
-    $isDefault     = array_key_exists('is_default', $body) ? arenaBoolToInt($body['is_default']) : (int)$ruleset['is_default'];
-    $enabled       = array_key_exists('enabled', $body) ? arenaBoolToInt($body['enabled']) : (int)$ruleset['enabled'];
+    $isDefault = array_key_exists('is_default', $body) ? arenaBoolToInt($body['is_default']) : (int)$format['is_default'];
+    $enabled   = array_key_exists('enabled', $body) ? arenaBoolToInt($body['enabled']) : (int)$format['enabled'];
 
     $db->beginTransaction();
     try {
         if ($isDefault) {
-            $db->prepare('UPDATE arena_rulesets SET is_default = 0 WHERE game_id = ? AND id != ?')
-               ->execute([(int)$ruleset['game_id'], $id]);
+            $db->prepare('UPDATE arena_formats SET is_default = 0 WHERE id != ?')->execute([$id]);
         }
         $stmt = $db->prepare('
-            UPDATE arena_rulesets
-            SET slug = ?, name = ?, sequence = ?, turn_seconds = ?, mirror_allowed = ?, fearless = ?,
+            UPDATE arena_formats
+            SET slug = ?, name = ?, sequence = ?, pool_size = ?, wins_needed = ?, turn_seconds = ?,
                 is_default = ?, enabled = ?, source = \'user\', updated_by = ?, updated_at = ?
             WHERE id = ?
         ');
         $stmt->execute([
-            $newSlug, $name, $sequenceJson, $turnSeconds, $mirrorAllowed, $fearless,
+            $newSlug, $name, json_encode($sequence, JSON_UNESCAPED_UNICODE), $poolSize, $winsNeeded, $turnSeconds,
             $isDefault, $enabled, $admin['id'], time(), $id,
         ]);
         $db->commit();
@@ -664,146 +373,25 @@ function arenaHandleAdminRulesetUpdate(array $params, PDO $db): void {
         if ($db->inTransaction()) {
             $db->rollBack();
         }
-        jsonResponse(['success' => false, 'message' => 'そのスラッグのルールセットは既に存在します'], 409);
+        jsonResponse(['success' => false, 'message' => 'そのスラッグのフォーマットは既に存在します'], 409);
     }
 
-    jsonResponse(['success' => true, 'ruleset' => arenaFindRulesetById($db, $id)]);
+    jsonResponse(['success' => true, 'format' => arenaSerializeFormatRow(arenaFindFormatById($db, $id))]);
 }
 
-// DELETE /v1/admin/rulesets/{id} — 論理削除のみ
-function arenaHandleAdminRulesetDelete(array $params, PDO $db): void {
-    $admin   = requireArenaAdmin($db);
-    $id      = (int)($params['id'] ?? 0);
-    $ruleset = arenaFindRulesetById($db, $id);
-    if (!$ruleset) {
-        jsonResponse(['success' => false, 'message' => 'ルールセットが見つかりません'], 404);
+// DELETE /v1/admin/formats/{id} — 論理削除のみ
+function arenaHandleAdminFormatDelete(array $params, PDO $db): void {
+    $admin  = requireArenaAdmin($db);
+    $id     = (int)($params['id'] ?? 0);
+    $format = arenaFindFormatById($db, $id);
+    if (!$format) {
+        jsonResponse(['success' => false, 'message' => 'フォーマットが見つかりません'], 404);
     }
 
-    $stmt = $db->prepare("UPDATE arena_rulesets SET enabled = 0, source = 'user', updated_by = ?, updated_at = ? WHERE id = ?");
+    $stmt = $db->prepare("UPDATE arena_formats SET enabled = 0, source = 'user', updated_by = ?, updated_at = ? WHERE id = ?");
     $stmt->execute([$admin['id'], time(), $id]);
 
     jsonResponse(['success' => true]);
-}
-
-// ── Data Dragon 同期（LoLのみ） ─────────────────────────────────
-
-// POST /v1/admin/games/{slug}/sync
-function arenaHandleAdminGameSync(array $params, PDO $db): void {
-    $admin = requireArenaAdmin($db);
-    $slug  = $params['slug'] ?? '';
-    $game  = arenaFindGameBySlug($db, $slug);
-    if (!$game) {
-        jsonResponse(['success' => false, 'message' => 'ゲームが見つかりません'], 404);
-    }
-    if ($game['entry_source'] !== 'ddragon') {
-        jsonResponse(['success' => false, 'message' => 'このゲームは Data Dragon 同期の対象ではありません'], 400);
-    }
-
-    require_once __DIR__ . '/../lib/ddragon.php';
-    $result = arenaSyncDdragon($db, $game, $admin['id']);
-    if (!$result['success']) {
-        jsonResponse(['success' => false, 'message' => $result['message']], 502);
-    }
-
-    jsonResponse(['success' => true, 'version' => $result['version'], 'count' => $result['count']]);
-}
-
-// ── 再シード（JSON を明示的に再適用。source='seed' の行のみ上書き） ─
-
-// POST /v1/admin/games/{slug}/reseed
-function arenaHandleAdminGameReseed(array $params, PDO $db): void {
-    $admin = requireArenaAdmin($db);
-    $slug  = $params['slug'] ?? '';
-    $game  = arenaFindGameBySlug($db, $slug);
-    if (!$game) {
-        jsonResponse(['success' => false, 'message' => 'ゲームが見つかりません'], 404);
-    }
-
-    $file = __DIR__ . '/../data/' . $slug . '.json';
-    if (!is_file($file)) {
-        jsonResponse(['success' => false, 'message' => '対応する JSON ファイルが見つかりません（data/' . $slug . '.json）'], 404);
-    }
-    $json = json_decode(file_get_contents($file), true);
-    if (!is_array($json)) {
-        jsonResponse(['success' => false, 'message' => 'JSON の解析に失敗しました'], 400);
-    }
-
-    $now    = time();
-    $gameId = (int)$game['id'];
-
-    $db->beginTransaction();
-    try {
-        // ゲーム自体も source='seed' のときだけ上書き（'user' に変えたゲームは保護）
-        $stmt = $db->prepare("
-            UPDATE arena_games SET name = ?, entry_label = ?, icon = ?, sort_order = ?, entry_source = ?, updated_by = ?, updated_at = ?
-            WHERE id = ? AND source = 'seed'
-        ");
-        $stmt->execute([
-            (string)($json['name'] ?? $game['name']),
-            (string)($json['entry_label'] ?? $game['entry_label']),
-            (string)($json['icon'] ?? $game['icon']),
-            (int)($json['sort_order'] ?? $game['sort_order']),
-            (string)($json['entry_source'] ?? $game['entry_source']),
-            $admin['id'], $now, $gameId,
-        ]);
-
-        $entryStmt = $db->prepare("
-            INSERT INTO arena_entries (game_id, slug, name, image_url, tags, source, enabled, created_by, updated_by, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, 'seed', 1, ?, ?, ?, ?)
-            ON CONFLICT(game_id, slug) DO UPDATE SET
-                name = excluded.name, image_url = excluded.image_url, tags = excluded.tags,
-                enabled = 1, updated_by = excluded.updated_by, updated_at = excluded.updated_at
-            WHERE arena_entries.source = 'seed'
-        ");
-        $entryCount = 0;
-        foreach (($json['entries'] ?? []) as $entry) {
-            if (empty($entry['slug']) || empty($entry['name'])) {
-                continue;
-            }
-            $entryStmt->execute([
-                $gameId, (string)$entry['slug'], (string)$entry['name'],
-                (string)($entry['image_url'] ?? ''), (string)($entry['tags'] ?? ''),
-                $admin['id'], $admin['id'], $now, $now,
-            ]);
-            $entryCount++;
-        }
-
-        $rulesetStmt = $db->prepare("
-            INSERT INTO arena_rulesets
-                (game_id, slug, name, sequence, turn_seconds, mirror_allowed, fearless, is_default, source, enabled, created_by, updated_by, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'seed', 1, ?, ?, ?, ?)
-            ON CONFLICT(game_id, slug) DO UPDATE SET
-                name = excluded.name, sequence = excluded.sequence, turn_seconds = excluded.turn_seconds,
-                mirror_allowed = excluded.mirror_allowed, fearless = excluded.fearless, is_default = excluded.is_default,
-                enabled = 1, updated_by = excluded.updated_by, updated_at = excluded.updated_at
-            WHERE arena_rulesets.source = 'seed'
-        ");
-        $rulesetCount = 0;
-        foreach (($json['rulesets'] ?? []) as $ruleset) {
-            if (empty($ruleset['slug']) || empty($ruleset['sequence'])) {
-                continue;
-            }
-            $rulesetStmt->execute([
-                $gameId, (string)$ruleset['slug'], (string)($ruleset['name'] ?? $ruleset['slug']),
-                json_encode($ruleset['sequence'], JSON_UNESCAPED_UNICODE),
-                (int)($ruleset['turn_seconds'] ?? 30),
-                !empty($ruleset['mirror_allowed']) ? 1 : 0,
-                !empty($ruleset['fearless']) ? 1 : 0,
-                !empty($ruleset['is_default']) ? 1 : 0,
-                $admin['id'], $admin['id'], $now, $now,
-            ]);
-            $rulesetCount++;
-        }
-
-        $db->commit();
-    } catch (Throwable $e) {
-        if ($db->inTransaction()) {
-            $db->rollBack();
-        }
-        throw $e;
-    }
-
-    jsonResponse(['success' => true, 'entries' => $entryCount, 'rulesets' => $rulesetCount]);
 }
 
 // ── API キー（Discordボット用） ──────────────────────────────────
