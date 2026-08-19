@@ -13,42 +13,96 @@ function sideLabel(side) {
   return side === 'A' ? 'A側（先手）' : side === 'B' ? 'B側（後手）' : '—'
 }
 
-// ── ルーレット ────────────────────────────────────────────────
-function RoulettePanel({ series, onSpin, acting, myId }) {
+// ── 先手後手の決定（ルーレット / レートが低いほうが選択） ────────
+function SideDecisionPanel({ series, onSpin, onChoose, acting, myId }) {
   const [spinning, setSpinning] = useState(false)
+  const d = series.side_decision || {}
 
   const p1 = series.player1_name
   const p2 = series.player2_name || '（相手待ち）'
 
-  async function handleSpin() {
-    setSpinning(true)
-    const ok = await onSpin()
-    // 結果はサーバー確定済み。演出のぶんだけ待ってから開示する
-    setTimeout(() => setSpinning(false), ok ? SPIN_MS : 0)
+  if (series.player2_id === null) {
+    return (
+      <div className="card arena-card arena-roulette">
+        <h2 className="arena-section-title">先手・後手を決める</h2>
+        <p className="arena-muted">相手の参加を待っています。</p>
+      </div>
+    )
   }
 
-  return (
-    <div className="card arena-card arena-roulette">
-      <h2 className="arena-section-title">🎰 先手・後手を決める</h2>
-      <p className="arena-muted">
-        どちらが A側（先手）になるかをルーレットで決めます。結果はサーバー側で確定し、引き直しはできません。
-      </p>
+  // レート差がしきい値以内 → ルーレット
+  if (d.method === 'roulette') {
+    async function handleSpin() {
+      setSpinning(true)
+      const ok = await onSpin()
+      // 結果はサーバー確定済み。演出のぶんだけ待ってから開示する
+      setTimeout(() => setSpinning(false), ok ? SPIN_MS : 0)
+    }
+    return (
+      <div className="card arena-card arena-roulette">
+        <h2 className="arena-section-title">🎰 先手・後手を決める</h2>
+        <p className="arena-muted">
+          シリーズレートがほぼ互角（差 {d.diff} / しきい値 {d.threshold}）なので、ルーレットで決めます。
+          結果はサーバー側で確定し、引き直しはできません。
+        </p>
 
-      <div className={`arena-roulette-wheel${spinning ? ' arena-roulette-wheel--spinning' : ''}`}>
-        <div className="arena-roulette-name">{p1}</div>
-        <div className="arena-roulette-vs">VS</div>
-        <div className="arena-roulette-name">{p2}</div>
-      </div>
+        <div className={`arena-roulette-wheel${spinning ? ' arena-roulette-wheel--spinning' : ''}`}>
+          <div className="arena-roulette-name">{p1}<span className="arena-rate">{d.player1_rating}</span></div>
+          <div className="arena-roulette-vs">VS</div>
+          <div className="arena-roulette-name">{p2}<span className="arena-rate">{d.player2_rating}</span></div>
+        </div>
 
-      {series.player2_id === null ? (
-        <p className="arena-muted">相手の参加を待っています。</p>
-      ) : (
         <button className="btn btn-primary" onClick={handleSpin} disabled={acting || spinning}>
           {spinning ? '抽選中…' : 'ルーレットを回す'}
         </button>
-      )}
-    </div>
-  )
+      </div>
+    )
+  }
+
+  // レート差あり → 低いほうが先行/後行を選ぶ
+  if (d.method === 'choice') {
+    const chooserIsMe = d.chooser_user_id === myId
+    // ローカル（1画面）モードは作成者が両者ぶんを代行する運用なので操作を許す
+    const canChoose = chooserIsMe || (series.mode === 'local' && series.created_by === myId)
+    const chooserName = d.chooser_user_id === series.player1_id ? p1 : p2
+
+    return (
+      <div className="card arena-card arena-roulette">
+        <h2 className="arena-section-title">⚖️ 先手・後手を決める</h2>
+        <p className="arena-muted">
+          シリーズレートに差があるため（差 {d.diff} / しきい値 {d.threshold}）、
+          レートが低い <strong>{chooserName}</strong> が先行・後行を選べます。
+        </p>
+
+        <div className="arena-roulette-wheel">
+          <div className="arena-roulette-name">
+            {p1}<span className="arena-rate">{d.player1_rating}</span>
+            {d.chooser_user_id === series.player1_id && <span className="arena-badge">選択権</span>}
+          </div>
+          <div className="arena-roulette-vs">VS</div>
+          <div className="arena-roulette-name">
+            {p2}<span className="arena-rate">{d.player2_rating}</span>
+            {d.chooser_user_id === series.player2_id && <span className="arena-badge">選択権</span>}
+          </div>
+        </div>
+
+        {canChoose ? (
+          <div className="arena-side-choice">
+            <button className="btn btn-primary" disabled={acting} onClick={() => onChoose('A')}>
+              先行（A側）を取る
+            </button>
+            <button className="btn btn-secondary" disabled={acting} onClick={() => onChoose('B')}>
+              後行（B側）を取る
+            </button>
+          </div>
+        ) : (
+          <p className="arena-muted">{chooserName} の選択を待っています。</p>
+        )}
+      </div>
+    )
+  }
+
+  return <div className="card arena-card"><p className="arena-muted">先手後手を決めています…</p></div>
 }
 
 // ── タイトルドラフト ──────────────────────────────────────────
@@ -261,7 +315,13 @@ export default function ArenaSeries() {
       )}
 
       {s.status === 'roulette' && (
-        <RoulettePanel series={s} onSpin={sync.spinRoulette} acting={sync.acting} myId={myId} />
+        <SideDecisionPanel
+          series={s}
+          onSpin={sync.spinRoulette}
+          onChoose={sync.chooseSide}
+          acting={sync.acting}
+          myId={myId}
+        />
       )}
 
       {s.status === 'drafting' && d && (

@@ -314,6 +314,52 @@ function AdminsPanel() {
   )
 }
 
+// ── 設定 ──────────────────────────────────────────────────────
+function SettingsPanel() {
+  const [threshold, setThreshold] = useState('')
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    arenaApi.get('/v1/admin/settings')
+      .then(d => setThreshold(String(d.settings.side_choice_threshold)))
+      .catch(e => setError(errMsg(e)))
+  }, [])
+
+  async function save(e) {
+    e.preventDefault()
+    setError(null); setSaved(false)
+    try {
+      const d = await arenaApi.patch('/v1/admin/settings', {
+        side_choice_threshold: Number(threshold),
+      })
+      setThreshold(String(d.settings.side_choice_threshold))
+      setSaved(true)
+    } catch (e) { setError(errMsg(e)) }
+  }
+
+  return (
+    <div className="card arena-card">
+      <h2 className="arena-section-title">⚖️ 先手後手の決め方</h2>
+      <p className="arena-muted">
+        シリーズレート（5番勝負のElo）の差がこの値<strong>以内</strong>なら互角とみなしてルーレット、
+        超えていればレートが低いほうが先行・後行を選べます。
+      </p>
+      {error && <p className="arena-error">{error}</p>}
+      <form className="arena-form-grid" onSubmit={save}>
+        <label className="arena-field">
+          <span>同点とみなすレート差</span>
+          <input type="number" min="0" max="1000" step="1"
+                 value={threshold} onChange={e => { setThreshold(e.target.value); setSaved(false) }} />
+        </label>
+        <button className="btn btn-primary" disabled={threshold === ''}>
+          {saved ? '保存しました' : '保存'}
+        </button>
+      </form>
+    </div>
+  )
+}
+
 // ── ページ本体 ────────────────────────────────────────────────
 // arena_admins が空のうちは admin_bootstrap_available が true になり、この画面を開ける。
 // ロリポップ ライトプランには SSH が無く CLI を叩けないため、最初の管理者は
@@ -351,6 +397,7 @@ export default function ArenaAdmin() {
 
       <GamesPanel />
       <FormatsPanel />
+      <SettingsPanel />
       <KeysPanel />
       <AdminsPanel />
 

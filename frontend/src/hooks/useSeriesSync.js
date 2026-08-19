@@ -99,8 +99,15 @@ export default function useSeriesSync(publicId) {
   }, [applyResponse])
 
   // ルーレット（A/B決定）。サーバー側で確定し、引き直しは不可。
+  // シリーズEloの差がしきい値以内のときだけ使える。
   const spinRoulette = useCallback(
     () => post(`/v1/series/${publicId}/roulette`, {}),
+    [post, publicId]
+  )
+
+  // レートが低いほうが先行(A)/後行(B)を選ぶ。差がしきい値を超えるときだけ使える。
+  const chooseSide = useCallback(
+    (side) => post(`/v1/series/${publicId}/choose-side`, { side }),
     [post, publicId]
   )
 
@@ -120,5 +127,5 @@ export default function useSeriesSync(publicId) {
     [post, publicId]
   )
 
-  return { series, draft, loading, error, acting, spinRoulette, act, reportGame, confirmGame, refresh }
+  return { series, draft, loading, error, acting, spinRoulette, chooseSide, act, reportGame, confirmGame, refresh }
 }

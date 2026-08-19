@@ -58,6 +58,8 @@ function arenaSerializeSeries(PDO $db, array $series): array {
         'side_a_user_id' => $series['side_a_user_id'] !== null ? (int)$series['side_a_user_id'] : null,
         'side_b_user_id' => $series['side_b_user_id'] !== null ? (int)$series['side_b_user_id'] : null,
         'roulette_at'    => $series['roulette_at'] !== null ? (int)$series['roulette_at'] : null,
+        // 先手後手の決め方（シリーズEloの差で ルーレット / 低いほうが選択 に分岐）
+        'side_decision'  => arenaSeriesSideDecision($db, $series),
         'turn_index'     => (int)$series['turn_index'],
         'turn_deadline'  => $series['turn_deadline'] !== null ? (int)$series['turn_deadline'] : null,
         'version'        => (int)$series['version'],
@@ -335,6 +337,30 @@ function arenaHandleSeriesRoulette(array $params, PDO $db): void {
     }
 
     jsonResponse(['success' => true, 'series' => arenaSerializeSeries($db, $series)]);
+}
+
+// POST /v1/series/{public_id}/choose-side — レートが低いほうが先行/後行を選ぶ {side:'A'|'B'}
+function arenaHandleSeriesChooseSide(array $params, PDO $db): void {
+    $user   = arenaActor($db, 'write');
+    $series = arenaRequireSeriesAccess($db, $params['public_id'] ?? '', $user);
+
+    $body = arenaReadJsonBody();
+    if ($err = arenaCheckAllowedFields($body, ['side'])) {
+        jsonResponse(['success' => false, 'message' => $err], 400);
+    }
+
+    try {
+        $series = arenaSeriesChooseSide($db, $series, $user, (string)($body['side'] ?? ''));
+    } catch (ArenaDraftError $e) {
+        jsonResponse(['success' => false, 'message' => $e->getMessage()], $e->status);
+    }
+
+    $format = arenaLoadFormat($db, (int)$series['format_id']);
+    jsonResponse([
+        'success' => true,
+        'series'  => arenaSerializeSeries($db, $series),
+        'draft'   => $format ? arenaSeriesState($db, $series, $format) : null,
+    ]);
 }
 
 // GET /v1/series/{public_id}/draft?since=N — タイトルドラフト状態。

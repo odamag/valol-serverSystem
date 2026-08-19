@@ -2694,3 +2694,28 @@ body {
   .arena-lineup-row { font-size: 0.88rem; }
   .arena-score-num { font-size: 1.4rem; }
 }
+
+/* 先手後手の決定（ルーレット / レート差による選択） */
+.arena-rate {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+.arena-side-choice {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.arena-badge {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  background: rgba(59, 130, 246, 0.22);
+  color: #93c5fd;
+}
+.arena-badge--muted { background: rgba(255, 255, 255, 0.1); color: var(--text-muted); }

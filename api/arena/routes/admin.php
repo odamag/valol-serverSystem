@@ -520,3 +520,44 @@ function arenaHandleAdminAdminDelete(array $params, PDO $db): void {
     $db->prepare('DELETE FROM arena_admins WHERE user_id = ?')->execute([$userId]);
     jsonResponse(['success' => true]);
 }
+
+// ── 設定（先手後手の決め方のしきい値など） ─────────────────────
+
+// GET /v1/admin/settings
+function arenaHandleAdminSettingsGet(array $params, PDO $db): void {
+    requireArenaAdmin($db);
+    jsonResponse([
+        'success'  => true,
+        'settings' => [
+            // シリーズEloの差がこの値以内なら「同点」とみなし、ルーレットで先手後手を決める。
+            // 超えている場合はレートが低いほうが先行/後行を選ぶ（ハンデ）。
+            'side_choice_threshold' => arenaSideChoiceThreshold($db),
+        ],
+    ]);
+}
+
+// PATCH /v1/admin/settings
+function arenaHandleAdminSettingsUpdate(array $params, PDO $db): void {
+    requireArenaAdmin($db);
+    $body = arenaReadJsonBody();
+    if ($err = arenaCheckAllowedFields($body, ['side_choice_threshold'])) {
+        jsonResponse(['success' => false, 'message' => $err], 400);
+    }
+
+    if (array_key_exists('side_choice_threshold', $body)) {
+        $v = $body['side_choice_threshold'];
+        if (is_bool($v) || !is_numeric($v)) {
+            jsonResponse(['success' => false, 'message' => 'しきい値は数値で指定してください'], 400);
+        }
+        $n = (float)$v;
+        if ($n < 0 || $n > 1000) {
+            jsonResponse(['success' => false, 'message' => 'しきい値は 0〜1000 の範囲で指定してください'], 400);
+        }
+        arenaMetaSet($db, 'side_choice_threshold', (string)$n);
+    }
+
+    jsonResponse([
+        'success'  => true,
+        'settings' => ['side_choice_threshold' => arenaSideChoiceThreshold($db)],
+    ]);
+}

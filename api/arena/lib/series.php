@@ -55,30 +55,69 @@ function arenaCanActSeries(array $series, int $actorId, string $side): bool {
     return false;
 }
 
-// ルーレット（A/B＝先手後手の決定）。サーバー側で random_bytes によりシードを生成し、
-// 決定的にA/Bを割り当てる。再抽選は不可（status が 'roulette' のときのみ実行できる）。
-function arenaSeriesRoulette(PDO $db, array $series, array $actor): array {
-    if ($series['status'] !== 'roulette') {
-        throw new ArenaDraftError('ルーレットは現在実行できません（対象外、または既に実施済みです）', 400);
+// 先手後手の決め方の既定しきい値。シリーズEloの差がこの値以内なら「同点」とみなす。
+// arena_meta の 'side_choice_threshold' で上書きできる（管理画面から変更可）。
+define('ARENA_SIDE_CHOICE_THRESHOLD_DEFAULT', 25.0);
+
+function arenaSideChoiceThreshold(PDO $db): float {
+    $v = arenaMetaGet($db, 'side_choice_threshold');
+    if ($v === null || !is_numeric($v)) {
+        return ARENA_SIDE_CHOICE_THRESHOLD_DEFAULT;
+    }
+    return max(0.0, (float)$v);
+}
+
+// シリーズEloを引く（arena_ratings の game_id = -1）。行が無ければ初期値1200。
+function arenaSeriesRatingOf(PDO $db, int $userId): float {
+    $stmt = $db->prepare('SELECT rating FROM arena_ratings WHERE game_id = -1 AND user_id = ?');
+    $stmt->execute([$userId]);
+    $v = $stmt->fetchColumn();
+    return $v === false ? 1200.0 : (float)$v;
+}
+
+// 先手後手をどう決めるかを判定する。
+//   method='roulette' … シリーズEloの差がしきい値以内（同点扱い）。ルーレットで決める。
+//   method='choice'   … 差がある。レートが低いほうが先行/後行を選ぶ（ハンデ）。
+// 両者が確定していない段階では method=null を返す。
+function arenaSeriesSideDecision(PDO $db, array $series): array {
+    $p1 = (int)$series['player1_id'];
+    $p2 = $series['player2_id'] !== null ? (int)$series['player2_id'] : null;
+    $threshold = arenaSideChoiceThreshold($db);
+
+    if ($p2 === null) {
+        return [
+            'method' => null, 'chooser_user_id' => null,
+            'player1_rating' => round(arenaSeriesRatingOf($db, $p1), 1),
+            'player2_rating' => null,
+            'diff' => null, 'threshold' => $threshold,
+        ];
     }
 
-    $uid = (int)$actor['id'];
-    $p2  = $series['player2_id'] !== null ? (int)$series['player2_id'] : null;
-    if ($uid !== (int)$series['player1_id'] && $uid !== $p2) {
-        throw new ArenaDraftError('このシリーズを操作する権限がありません', 403);
+    $r1 = arenaSeriesRatingOf($db, $p1);
+    $r2 = arenaSeriesRatingOf($db, $p2);
+    $diff = abs($r1 - $r2);
+
+    if ($diff <= $threshold) {
+        $method = 'roulette';
+        $chooser = null;
+    } else {
+        $method = 'choice';
+        $chooser = $r1 < $r2 ? $p1 : $p2;   // レートが低いほうが選ぶ
     }
 
-    $seed = bin2hex(random_bytes(16));
-    $hash = sha1($seed);
-    // シードの先頭バイトの偶奇で player1 が A になるか B になるかを決める。
-    // サーバー権威・シードから一意に再現可能・後から改ざんできない。
-    $player1IsA = (hexdec(substr($hash, 0, 2)) % 2) === 0;
+    return [
+        'method'          => $method,
+        'chooser_user_id' => $chooser,
+        'player1_rating'  => round($r1, 1),
+        'player2_rating'  => round($r2, 1),
+        'diff'            => round($diff, 1),
+        'threshold'       => $threshold,
+    ];
+}
 
-    $player1Id = (int)$series['player1_id'];
-    $player2Id = (int)$series['player2_id'];
-    $sideAId = $player1IsA ? $player1Id : $player2Id;
-    $sideBId = $player1IsA ? $player2Id : $player1Id;
-
+// A/B確定の共通処理。$sideAId / $sideBId を書き込んで drafting へ進める。
+// $seed は監査用（ルーレットのときだけ入る）。
+function arenaSeriesCommitSides(PDO $db, array $series, int $sideAId, int $sideBId, ?string $seed): array {
     $format = arenaLoadFormat($db, (int)$series['format_id']);
     $now = time();
     $deadline = ($series['mode'] !== 'local' && $format && (int)$format['turn_seconds'] > 0)
@@ -88,11 +127,10 @@ function arenaSeriesRoulette(PDO $db, array $series, array $actor): array {
     $conflict = false;
     $db->exec('BEGIN IMMEDIATE');
     try {
-        // ロック取得後に再確認（同時押しのTOCTOU対策・再抽選の最終防壁）
+        // ロック取得後に再確認（同時押しのTOCTOU対策・やり直しの最終防壁）
         $checkStmt = $db->prepare('SELECT status FROM arena_series WHERE id = ?');
         $checkStmt->execute([(int)$series['id']]);
-        $freshStatus = $checkStmt->fetchColumn();
-        if ($freshStatus !== 'roulette') {
+        if ($checkStmt->fetchColumn() !== 'roulette') {
             $conflict = true;
         } else {
             $upd = $db->prepare("
@@ -112,10 +150,77 @@ function arenaSeriesRoulette(PDO $db, array $series, array $actor): array {
     }
 
     if ($conflict) {
-        throw new ArenaDraftError('ルーレットは既に実施済みです（再抽選はできません）', 400);
+        throw new ArenaDraftError('先手後手は既に確定しています（やり直しはできません）', 400);
     }
 
     return arenaLoadSeries($db, $series['public_id']) ?? $series;
+}
+
+// レートが低いほうが先行/後行を選ぶ。$side は 'A'（先行）か 'B'（後行）。
+function arenaSeriesChooseSide(PDO $db, array $series, array $actor, string $side): array {
+    if ($series['status'] !== 'roulette') {
+        throw new ArenaDraftError('先手後手は現在決められません（対象外、または既に確定しています）', 400);
+    }
+    if ($side !== 'A' && $side !== 'B') {
+        throw new ArenaDraftError('side は "A"（先行）か "B"（後行）を指定してください', 400);
+    }
+
+    $uid = (int)$actor['id'];
+    $p2  = $series['player2_id'] !== null ? (int)$series['player2_id'] : null;
+    if ($uid !== (int)$series['player1_id'] && $uid !== $p2) {
+        throw new ArenaDraftError('このシリーズを操作する権限がありません', 403);
+    }
+
+    $decision = arenaSeriesSideDecision($db, $series);
+    if ($decision['method'] !== 'choice') {
+        throw new ArenaDraftError('レート差が小さいため、先手後手はルーレットで決めます', 400);
+    }
+
+    // 選ぶ権利があるのは低いほうだけ。ただしローカル（1画面）モードは
+    // 作成者が両者ぶんを代行して操作する運用なので、作成者にも許可する。
+    $chooser = (int)$decision['chooser_user_id'];
+    $allowed = ($uid === $chooser) || ($series['mode'] === 'local' && $uid === (int)$series['created_by']);
+    if (!$allowed) {
+        throw new ArenaDraftError('先手後手を選べるのはレートが低いほうのプレイヤーです', 403);
+    }
+
+    $sideAId = $side === 'A' ? $chooser : ($chooser === (int)$series['player1_id'] ? $p2 : (int)$series['player1_id']);
+    $sideBId = $sideAId === $chooser ? ($chooser === (int)$series['player1_id'] ? $p2 : (int)$series['player1_id']) : $chooser;
+
+    return arenaSeriesCommitSides($db, $series, (int)$sideAId, (int)$sideBId, null);
+}
+
+// ルーレット（A/B＝先手後手の決定）。サーバー側で random_bytes によりシードを生成し、
+// 決定的にA/Bを割り当てる。再抽選は不可（status が 'roulette' のときのみ実行できる）。
+// シリーズEloに差がある場合はルーレットではなく「低いほうが選ぶ」になるため、ここでは弾く。
+function arenaSeriesRoulette(PDO $db, array $series, array $actor): array {
+    if ($series['status'] !== 'roulette') {
+        throw new ArenaDraftError('ルーレットは現在実行できません（対象外、または既に実施済みです）', 400);
+    }
+
+    $uid = (int)$actor['id'];
+    $p2  = $series['player2_id'] !== null ? (int)$series['player2_id'] : null;
+    if ($uid !== (int)$series['player1_id'] && $uid !== $p2) {
+        throw new ArenaDraftError('このシリーズを操作する権限がありません', 403);
+    }
+
+    $decision = arenaSeriesSideDecision($db, $series);
+    if ($decision['method'] !== 'roulette') {
+        throw new ArenaDraftError('レート差があるため、レートが低いほうが先行/後行を選びます', 400);
+    }
+
+    $seed = bin2hex(random_bytes(16));
+    $hash = sha1($seed);
+    // シードの先頭バイトの偶奇で player1 が A になるか B になるかを決める。
+    // サーバー権威・シードから一意に再現可能・後から改ざんできない。
+    $player1IsA = (hexdec(substr($hash, 0, 2)) % 2) === 0;
+
+    $player1Id = (int)$series['player1_id'];
+    $player2Id = (int)$series['player2_id'];
+    $sideAId = $player1IsA ? $player1Id : $player2Id;
+    $sideBId = $player1IsA ? $player2Id : $player1Id;
+
+    return arenaSeriesCommitSides($db, $series, $sideAId, $sideBId, $seed);
 }
 
 // クライアント向けのドラフト状態を組み立てる（プールの各タイトルの状態・実行済みアクション・
