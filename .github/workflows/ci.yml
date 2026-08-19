@@ -1,0 +1,53 @@
+name: CI
+
+# プルリクエスト時に「ビルドが通るか」だけを確認する。デプロイは一切しない。
+#
+# 背景: デプロイ用ワークフロー(deploy.yml)は main への push でしか動かないため、
+# これまでフロントエンドのビルド崩れは main にマージされて初めて発覚し、
+# そのままデプロイまで巻き添えで失敗する状態だった。
+# ここでビルドだけ先に検証しておけば、壊れた状態で main に入るのを防げる。
+on:
+  pull_request:
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    name: フロントエンドのビルド
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+  php-lint:
+    name: PHPの構文チェック
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 本番のロリポップは PHP 7.4 以降。7.4 で通ることを確認しておけば、
+      # うっかり新しい構文(match式・enum・名前付き引数など)を混ぜても気づける。
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.4'
+
+      - name: Lint
+        run: |
+          find api games lib -name '*.php' -print0 \
+            | xargs -0 -n1 -P4 php -l
