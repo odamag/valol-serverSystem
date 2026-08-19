@@ -2746,3 +2746,36 @@ body {
 @media (max-width: 600px) {
   .arena-edit-name, .arena-edit-slug { min-width: 6em; width: 100%; }
 }
+
+/* 管理画面の一覧ヘッダ・絞り込み */
+.arena-list-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+.arena-list-head .arena-subsection-title { margin: 0; }
+.arena-filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.arena-filter-toggle input { accent-color: var(--accent); }
+
+/* 文中に置くリンク風ボタン（「デフォルトに戻す」など） */
+.arena-link-btn {
+  margin-left: 10px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.82rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.arena-link-btn:hover { color: var(--accent-hover); }

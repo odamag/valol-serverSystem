@@ -33,6 +33,8 @@ function arenaSerializeGameRow(array $g): array {
         'name'       => $g['name'],
         'icon'       => $g['icon'],
         'sort_order' => (int)$g['sort_order'],
+        // シリーズ作成画面で初期選択するタイトルかどうか
+        'is_default' => (bool)$g['is_default'],
     ];
 }
 

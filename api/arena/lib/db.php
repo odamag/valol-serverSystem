@@ -29,6 +29,7 @@ function getArenaDB(): PDO {
           icon TEXT DEFAULT '', sort_order INTEGER DEFAULT 0,
           source TEXT DEFAULT 'seed',          -- 'seed'（JSON 由来）| 'user'（UI で作成/編集）
           enabled INTEGER DEFAULT 1,
+          is_default INTEGER DEFAULT 0,        -- シリーズ作成時に初期選択されるタイトルか
           created_by INTEGER, updated_by INTEGER,
           created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
         );
@@ -146,6 +147,8 @@ function getArenaDB(): PDO {
         );
     ");
 
+    arenaMigrate($db);
+
     return $db;
 }
 
@@ -164,4 +167,21 @@ function arenaMetaSet(PDO $db, string $key, string $value): void {
         ON CONFLICT(key) DO UPDATE SET value = excluded.value
     ');
     $stmt->execute([$key, $value]);
+}
+
+// 既存DBに後から列を足すための最小限のマイグレーション。
+// CREATE TABLE IF NOT EXISTS は既存テーブルには何もしないため、
+// 列を追加したときはここで補う（SQLiteのALTER TABLE ADD COLUMNは安全・高速）。
+function arenaEnsureColumn(PDO $db, string $table, string $column, string $definition): void {
+    $stmt = $db->query("PRAGMA table_info(" . $table . ")");
+    foreach ($stmt->fetchAll() as $col) {
+        if ($col['name'] === $column) {
+            return;
+        }
+    }
+    $db->exec("ALTER TABLE {$table} ADD COLUMN {$column} {$definition}");
+}
+
+function arenaMigrate(PDO $db): void {
+    arenaEnsureColumn($db, 'arena_games', 'is_default', 'INTEGER DEFAULT 0');
 }

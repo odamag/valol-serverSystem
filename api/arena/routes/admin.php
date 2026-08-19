@@ -108,6 +108,7 @@ function arenaHandleAdminGamesList(array $params, PDO $db): void {
             'icon'       => $g['icon'],
             'sort_order' => (int)$g['sort_order'],
             'enabled'    => (bool)$g['enabled'],
+            'is_default' => (bool)$g['is_default'],
             'source'     => $g['source'],
         ];
     }, $stmt->fetchAll());
@@ -119,7 +120,7 @@ function arenaHandleAdminGameCreate(array $params, PDO $db): void {
     $admin = requireArenaAdmin($db);
     $body  = arenaReadJsonBody();
 
-    $allowed = ['slug', 'name', 'icon', 'sort_order'];
+    $allowed = ['slug', 'name', 'icon', 'sort_order', 'is_default'];
     if ($err = arenaCheckAllowedFields($body, $allowed)) {
         jsonResponse(['success' => false, 'message' => $err], 400);
     }
@@ -141,8 +142,8 @@ function arenaHandleAdminGameCreate(array $params, PDO $db): void {
     $now = time();
     $stmt = $db->prepare('
         INSERT INTO arena_games
-            (slug, name, icon, sort_order, source, enabled, created_by, updated_by, created_at, updated_at)
-        VALUES (?, ?, ?, ?, \'user\', 1, ?, ?, ?, ?)
+            (slug, name, icon, sort_order, source, enabled, is_default, created_by, updated_by, created_at, updated_at)
+        VALUES (?, ?, ?, ?, \'user\', 1, ?, ?, ?, ?, ?)
     ');
     try {
         $stmt->execute([
@@ -150,6 +151,7 @@ function arenaHandleAdminGameCreate(array $params, PDO $db): void {
             $name,
             (string)($body['icon'] ?? ''),
             (int)($body['sort_order'] ?? 0),
+            arenaBoolToInt($body['is_default'] ?? false),
             $admin['id'],
             $admin['id'],
             $now,
@@ -173,7 +175,7 @@ function arenaHandleAdminGameUpdate(array $params, PDO $db): void {
     }
 
     $body = arenaReadJsonBody();
-    $allowed = ['slug', 'name', 'icon', 'sort_order', 'enabled'];
+    $allowed = ['slug', 'name', 'icon', 'sort_order', 'enabled', 'is_default'];
     if ($err = arenaCheckAllowedFields($body, $allowed)) {
         jsonResponse(['success' => false, 'message' => $err], 400);
     }
@@ -196,10 +198,11 @@ function arenaHandleAdminGameUpdate(array $params, PDO $db): void {
 
     $sortOrder = array_key_exists('sort_order', $body) ? (int)$body['sort_order'] : (int)$game['sort_order'];
     $enabled   = array_key_exists('enabled', $body) ? arenaBoolToInt($body['enabled']) : (int)$game['enabled'];
+    $isDefault = array_key_exists('is_default', $body) ? arenaBoolToInt($body['is_default']) : (int)$game['is_default'];
 
     $stmt = $db->prepare('
         UPDATE arena_games
-        SET slug = ?, name = ?, icon = ?, sort_order = ?, enabled = ?, source = \'user\', updated_by = ?, updated_at = ?
+        SET slug = ?, name = ?, icon = ?, sort_order = ?, enabled = ?, is_default = ?, source = \'user\', updated_by = ?, updated_at = ?
         WHERE id = ?
     ');
     try {
@@ -209,6 +212,7 @@ function arenaHandleAdminGameUpdate(array $params, PDO $db): void {
             (string)($body['icon'] ?? $game['icon']),
             $sortOrder,
             $enabled,
+            $isDefault,
             $admin['id'],
             time(),
             (int)$game['id'],

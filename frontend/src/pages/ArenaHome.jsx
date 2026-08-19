@@ -9,14 +9,20 @@ function errMsg(e) {
 // 9タイトルのプールを選ぶ。既定は「両者が所持しているタイトル」。
 // 書式の pool_size ちょうどでないとサーバー側が 400 を返すため、
 // 過不足を画面上でも分かるようにしておく。
-function PoolPicker({ games, selected, onToggle, poolSize }) {
+function PoolPicker({ games, selected, onToggle, poolSize, onResetDefault }) {
   const diff = selected.size - poolSize
+  const hasDefaults = games.some(g => g.is_default)
   return (
     <div className="arena-pool-picker">
       <p className={`arena-pool-count${diff === 0 ? ' arena-pool-count--ok' : ''}`}>
         選択中 {selected.size} / {poolSize}
         {diff > 0 && `（${diff} 個多いです）`}
         {diff < 0 && `（あと ${-diff} 個）`}
+        {hasDefaults && (
+          <button type="button" className="arena-link-btn" onClick={onResetDefault}>
+            デフォルトに戻す
+          </button>
+        )}
       </p>
       <div className="arena-title-grid">
         {games.map(g => (
@@ -28,6 +34,7 @@ function PoolPicker({ games, selected, onToggle, poolSize }) {
           >
             <span className="arena-title-icon">{g.icon || '🎮'}</span>
             <span className="arena-title-name">{g.name}</span>
+            {g.is_default && <span className="arena-title-mark">デフォルト</span>}
           </button>
         ))}
       </div>
@@ -71,13 +78,18 @@ export default function ArenaHome() {
       .catch(e => setError(errMsg(e)))
   }, [])
 
-  // 相手が決まったら「両者が所持しているタイトル」を既定プールとして読み込む
+  // 候補タイトルを読み込み、初期選択を決める。
+  // 相手が決まっていれば「両者が所持しているタイトル」に絞る。
+  // 初期選択は管理画面で「デフォルト」に設定されたタイトル。
+  // デフォルトが1つも無い（＝未設定）ときだけ、候補すべてを選んだ状態にする。
   const loadGames = useCallback(async (opponentId) => {
     try {
       const path = opponentId ? `/v1/games?playable_with=${opponentId}` : '/v1/games'
       const data = await arenaApi.get(path)
-      setGames(data.games || [])
-      setSelected(new Set((data.games || []).map(g => g.slug)))
+      const list = data.games || []
+      setGames(list)
+      const defaults = list.filter(g => g.is_default)
+      setSelected(new Set((defaults.length > 0 ? defaults : list).map(g => g.slug)))
       setError(null)
     } catch (e) {
       setError(errMsg(e))
@@ -191,7 +203,16 @@ export default function ArenaHome() {
         )}
 
         <h3 className="arena-subsection-title">タイトルプール</h3>
-        <PoolPicker games={games} selected={selected} onToggle={toggle} poolSize={poolSize} />
+        <PoolPicker
+          games={games}
+          selected={selected}
+          onToggle={toggle}
+          poolSize={poolSize}
+          onResetDefault={() => {
+            const defaults = games.filter(g => g.is_default)
+            setSelected(new Set((defaults.length > 0 ? defaults : games).map(g => g.slug)))
+          }}
+        />
 
         <button className="btn btn-primary" disabled={!canCreate} onClick={createSeries}>
           {busy ? '作成中…' : 'シリーズを作成'}
