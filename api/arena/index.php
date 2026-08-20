@@ -71,6 +71,7 @@ $routes = [
     ['GET', '#^/v1/players/(?P<id>\d+)$#',           'arenaHandlePlayer'],
     ['GET', '#^/v1/head-to-head$#',                  'arenaHandleHeadToHead'],
     ['GET', '#^/v1/title-stats$#',                   'arenaHandleTitleStats'],
+    ['GET', '#^/v1/seasons/current$#',               'arenaHandleSeasonCurrent'],
 
     // ゲームマスタ / フォーマット管理（管理者のみ。各ハンドラ内で requireArenaAdmin() を呼ぶ）
     ['GET',    '#^/v1/admin/games$#',                         'arenaHandleAdminGamesList'],
@@ -81,6 +82,8 @@ $routes = [
     ['POST',   '#^/v1/admin/formats$#',                       'arenaHandleAdminFormatCreate'],
     ['PATCH',  '#^/v1/admin/formats/(?P<id>\d+)$#',           'arenaHandleAdminFormatUpdate'],
     ['DELETE', '#^/v1/admin/formats/(?P<id>\d+)$#',           'arenaHandleAdminFormatDelete'],
+    ['POST',   '#^/v1/admin/seasons$#',                       'arenaHandleAdminSeasonStart'],
+    ['PATCH',  '#^/v1/admin/seasons/current$#',                'arenaHandleAdminSeasonUpdate'],
     ['GET',    '#^/v1/admin/settings$#',                      'arenaHandleAdminSettingsGet'],
     ['PATCH',  '#^/v1/admin/settings$#',                      'arenaHandleAdminSettingsUpdate'],
     ['GET',    '#^/v1/admin/keys$#',                          'arenaHandleAdminKeysList'],

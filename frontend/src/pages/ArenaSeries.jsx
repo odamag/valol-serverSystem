@@ -182,6 +182,28 @@ function DraftPanel({ series, draft, onAct, acting, myId }) {
   )
 }
 
+// ── 配置期間の完了演出 ──────────────────────────────────────
+// 配置期間が終わった瞬間に、抑えられていた表示ランクが確定したことを見せる。
+function PlacementRevealCard({ items, onClose }) {
+  if (!items || items.length === 0) return null
+  return (
+    <div className="card arena-card arena-placement-reveal">
+      <h2 className="arena-section-title">🎉 配置期間終了</h2>
+      <ul className="arena-reveal-list">
+        {items.map((it, i) => (
+          <li key={`${it.user_id}-${it.game_id}-${i}`} className="arena-reveal-item">
+            <span className="arena-reveal-scope">{it.scope_icon} {it.scope_label}</span>
+            <strong className="arena-reveal-name">{it.username}</strong>
+            <span className="arena-reveal-rank">{it.display_rating}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="arena-muted">ランクが確定しました。以降はレートがそのまま表示されます。</p>
+      <button className="btn btn-secondary" onClick={onClose}>閉じる</button>
+    </div>
+  )
+}
+
 // ── 5番勝負ボード ─────────────────────────────────────────────
 function SeriesBoard({ series, draft, onReport, onConfirm, acting, myId }) {
   const winsNeeded = series.format ? series.format.wins_needed : 3
@@ -327,6 +349,8 @@ export default function ArenaSeries() {
       {s.status === 'drafting' && d && (
         <DraftPanel series={s} draft={d} onAct={sync.act} acting={sync.acting} myId={myId} />
       )}
+
+      <PlacementRevealCard items={sync.placementCompleted} onClose={sync.clearPlacementCompleted} />
 
       {(s.status === 'playing' || s.status === 'finished') && d && (
         <>

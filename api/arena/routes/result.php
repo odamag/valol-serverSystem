@@ -77,7 +77,7 @@ function arenaFinalizeSeriesGame(PDO $db, array $series, array $gameRow, string 
     $upd->execute([$winnerSide, $confirmedBy, $now, (int)$gameRow['id']]);
     if ($upd->rowCount() === 0) {
         // 既に確定済み（同時実行）。Eloは触らずに抜ける。
-        return ['series_finished' => false];
+        return ['series_finished' => false, 'placement_completed' => []];
     }
 
     // 勝敗数を加算
@@ -86,10 +86,13 @@ function arenaFinalizeSeriesGame(PDO $db, array $series, array $gameRow, string 
        ->execute([$now, $seriesId]);
 
     // その試合のタイトル別Elo + 総合Elo
-    arenaApplyEloForScope($db, 'game', (int)$gameRow['id'], (int)$gameRow['game_id'],
-        $winner['id'], $winner['name'], $loser['id'], $loser['name']);
-    arenaApplyEloForScope($db, 'game', (int)$gameRow['id'], 0,
-        $winner['id'], $winner['name'], $loser['id'], $loser['name']);
+    // 戻り値はこの反映で配置期間を終えたプレイヤー（UIの演出に使う）
+    $completed = array_merge(
+        arenaApplyEloForScope($db, 'game', (int)$gameRow['id'], (int)$gameRow['game_id'],
+            $winner['id'], $winner['name'], $loser['id'], $loser['name']),
+        arenaApplyEloForScope($db, 'game', (int)$gameRow['id'], 0,
+            $winner['id'], $winner['name'], $loser['id'], $loser['name'])
+    );
 
     // シリーズ決着判定
     $format = arenaLoadFormat($db, (int)$series['format_id']);
@@ -108,7 +111,7 @@ function arenaFinalizeSeriesGame(PDO $db, array $series, array $gameRow, string 
         $seriesWinner = 'B';
     }
     if ($seriesWinner === null) {
-        return ['series_finished' => false];
+        return ['series_finished' => false, 'placement_completed' => $completed];
     }
 
     $db->prepare("
@@ -120,10 +123,10 @@ function arenaFinalizeSeriesGame(PDO $db, array $series, array $gameRow, string 
     // シリーズEloは game_id = -1
     $sWinner = $sides[$seriesWinner];
     $sLoser  = $sides[$seriesWinner === 'A' ? 'B' : 'A'];
-    arenaApplyEloForScope($db, 'series', $seriesId, -1,
-        $sWinner['id'], $sWinner['name'], $sLoser['id'], $sLoser['name']);
+    $completed = array_merge($completed, arenaApplyEloForScope($db, 'series', $seriesId, -1,
+        $sWinner['id'], $sWinner['name'], $sLoser['id'], $sLoser['name']));
 
-    return ['series_finished' => true];
+    return ['series_finished' => true, 'placement_completed' => $completed];
 }
 
 // 48時間承認されていない申告を自動承認する（遅延評価。cronを使わない）。
@@ -222,6 +225,35 @@ function arenaRequireReportableGame(PDO $db, array $params, array $user): array 
     return [$series, $target];
 }
 
+// 配置期間を終えたプレイヤーの一覧に、スコープの表示名を添える。
+// game_id: 正=タイトル別 / 0=総合 / -1=シリーズ別
+function arenaAnnotatePlacementCompleted(PDO $db, array $completed): array {
+    if (empty($completed)) {
+        return [];
+    }
+    $nameStmt = $db->prepare('SELECT name, icon FROM arena_games WHERE id = ?');
+    $out = [];
+    foreach ($completed as $c) {
+        $gid = (int)$c['game_id'];
+        if ($gid === 0) {
+            $label = '総合';
+            $icon  = '🏆';
+        } elseif ($gid === -1) {
+            $label = 'シリーズ';
+            $icon  = '🎴';
+        } else {
+            $nameStmt->execute([$gid]);
+            $row   = $nameStmt->fetch();
+            $label = $row ? $row['name'] : ('#' . $gid);
+            $icon  = $row ? $row['icon'] : '🎮';
+        }
+        $c['scope_label'] = $label;
+        $c['scope_icon']  = $icon;
+        $out[] = $c;
+    }
+    return $out;
+}
+
 // POST /v1/series/{public_id}/games/{game_no}/result — 勝敗を申告する {winner:'A'|'B'}
 function arenaHandleSeriesGameResult(array $params, PDO $db): void {
     $user = arenaActor($db, 'write');
@@ -297,9 +329,13 @@ function arenaHandleSeriesGameConfirm(array $params, PDO $db): void {
 
     $fresh  = arenaLoadSeries($db, $series['public_id']);
     $format = arenaLoadFormat($db, (int)$fresh['format_id']);
+    // 配置期間を終えたプレイヤーにタイトル名を添える（画面で「◯◯ の配置完了」と出すため）
+    $completed = arenaAnnotatePlacementCompleted($db, $result['placement_completed'] ?? []);
+
     jsonResponse([
-        'success'         => true,
-        'series_finished' => $result['series_finished'],
+        'success'             => true,
+        'series_finished'     => $result['series_finished'],
+        'placement_completed' => $completed,
         'series'          => arenaSerializeSeries($db, $fresh),
         'state'           => arenaSeriesState($db, $fresh, $format),
     ]);

@@ -585,3 +585,101 @@ function arenaHandleAdminSettingsUpdate(array $params, PDO $db): void {
         'settings' => ['side_choice_threshold' => arenaSideChoiceThreshold($db)],
     ]);
 }
+
+// ── シーズン（表示ランクの配置期間） ─────────────────────────────
+
+// GET /v1/seasons/current — 現行シーズン（ログインユーザーなら誰でも読める）
+function arenaHandleSeasonCurrent(array $params, PDO $db): void {
+    arenaActor($db, 'read');
+    jsonResponse(['success' => true, 'season' => arenaSerializeSeason(arenaCurrentSeason($db))]);
+}
+
+// PATCH /v1/admin/seasons/current — 現行シーズンの設定を変更する
+function arenaHandleAdminSeasonUpdate(array $params, PDO $db): void {
+    requireArenaAdmin($db);
+    $body = arenaReadJsonBody();
+    if ($err = arenaCheckAllowedFields($body, ['name', 'placement_games', 'offset_max', 'compress_ratio'])) {
+        jsonResponse(['success' => false, 'message' => $err], 400);
+    }
+
+    $season = arenaCurrentSeason($db);
+
+    $name = array_key_exists('name', $body) ? trim((string)$body['name']) : $season['name'];
+    if ($name === '') {
+        jsonResponse(['success' => false, 'message' => 'シーズン名を空にはできません'], 400);
+    }
+
+    $n = (int)$season['placement_games'];
+    if (array_key_exists('placement_games', $body)) {
+        if (!is_numeric($body['placement_games'])) {
+            jsonResponse(['success' => false, 'message' => '配置試合数は数値で指定してください'], 400);
+        }
+        $n = (int)$body['placement_games'];
+        if ($n < 0 || $n > 200) {
+            jsonResponse(['success' => false, 'message' => '配置試合数は 0〜200 の範囲で指定してください'], 400);
+        }
+    }
+
+    $offsetMax = (float)$season['offset_max'];
+    if (array_key_exists('offset_max', $body)) {
+        if (!is_numeric($body['offset_max'])) {
+            jsonResponse(['success' => false, 'message' => 'OFFSET_MAX は数値で指定してください'], 400);
+        }
+        $offsetMax = (float)$body['offset_max'];
+        if ($offsetMax < 0 || $offsetMax > 2000) {
+            jsonResponse(['success' => false, 'message' => 'OFFSET_MAX は 0〜2000 の範囲で指定してください'], 400);
+        }
+    }
+
+    $ratio = (float)$season['compress_ratio'];
+    if (array_key_exists('compress_ratio', $body)) {
+        if (!is_numeric($body['compress_ratio'])) {
+            jsonResponse(['success' => false, 'message' => '圧縮率は数値で指定してください'], 400);
+        }
+        $ratio = (float)$body['compress_ratio'];
+        if ($ratio < 0 || $ratio > 1) {
+            jsonResponse(['success' => false, 'message' => '圧縮率は 0〜1 の範囲で指定してください'], 400);
+        }
+    }
+
+    $db->prepare('
+        UPDATE arena_seasons
+        SET name = ?, placement_games = ?, offset_max = ?, compress_ratio = ?
+        WHERE id = ?
+    ')->execute([$name, $n, $offsetMax, $ratio, (int)$season['id']]);
+
+    jsonResponse(['success' => true, 'season' => arenaSerializeSeason(arenaCurrentSeason($db))]);
+}
+
+// POST /v1/admin/seasons — 新シーズンを開始する（内部レートを平均方向へ圧縮し、配置期間をリセット）
+function arenaHandleAdminSeasonStart(array $params, PDO $db): void {
+    requireArenaAdmin($db);
+    $body = arenaReadJsonBody();
+    if ($err = arenaCheckAllowedFields($body, ['name', 'placement_games', 'offset_max', 'compress_ratio'])) {
+        jsonResponse(['success' => false, 'message' => $err], 400);
+    }
+
+    $name = trim((string)($body['name'] ?? ''));
+    if ($name === '') {
+        jsonResponse(['success' => false, 'message' => '新しいシーズン名を入力してください'], 400);
+    }
+
+    $overrides = [];
+    foreach (['placement_games', 'offset_max', 'compress_ratio'] as $k) {
+        if (array_key_exists($k, $body)) {
+            if (!is_numeric($body[$k])) {
+                jsonResponse(['success' => false, 'message' => $k . ' は数値で指定してください'], 400);
+            }
+            $overrides[$k] = $body[$k];
+        }
+    }
+
+    try {
+        $season = arenaStartNewSeason($db, $name, $overrides);
+    } catch (Throwable $e) {
+        error_log('[arena] season start failed: ' . $e->getMessage());
+        jsonResponse(['success' => false, 'message' => 'シーズンの切り替えに失敗しました'], 500);
+    }
+
+    jsonResponse(['success' => true, 'season' => arenaSerializeSeason($season)]);
+}

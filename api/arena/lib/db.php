@@ -115,6 +115,18 @@ function getArenaDB(): PDO {
         );
         CREATE INDEX IF NOT EXISTS idx_arena_series_games_series ON arena_series_games(series_id);
 
+        -- シーズン。配置期間の長さや引き継ぎ圧縮率をシーズンごとに持つ。
+        -- 現行シーズンは ended_at IS NULL の最新行。
+        CREATE TABLE IF NOT EXISTS arena_seasons (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          placement_games INTEGER NOT NULL DEFAULT 20,   -- N（配置試合数）
+          offset_max REAL NOT NULL DEFAULT 100,          -- OFFSET_MAX（減衰係数 = OFFSET_MAX / N）
+          compress_ratio REAL NOT NULL DEFAULT 0.7,      -- 次シーズンへの引き継ぎ圧縮率
+          started_at INTEGER NOT NULL,
+          ended_at INTEGER
+        );
+
         -- レーティング。game_id の意味：正の値=タイトル別 / 0=総合 / -1=シリーズ（5番勝負）別
         CREATE TABLE IF NOT EXISTS arena_ratings (
           game_id INTEGER NOT NULL,
@@ -122,7 +134,12 @@ function getArenaDB(): PDO {
           rating REAL NOT NULL DEFAULT 1200,
           wins INTEGER DEFAULT 0, losses INTEGER DEFAULT 0,
           streak INTEGER DEFAULT 0,           -- 正=連勝 / 負=連敗
-          peak_rating REAL DEFAULT 1200, updated_at INTEGER NOT NULL,
+          peak_rating REAL DEFAULT 1200,
+          -- 表示ランク（配置期間）用。rating は内部レートで、配置期間中だけ表示側を抑える
+          season_games INTEGER DEFAULT 0,     -- 今シーズンの試合数
+          placement_done INTEGER DEFAULT 0,   -- 配置期間を終えたか（一度立つとシーズン中は下りない）
+          placement_done_at INTEGER,
+          updated_at INTEGER NOT NULL,
           PRIMARY KEY (game_id, user_id)
         );
 
@@ -184,4 +201,8 @@ function arenaEnsureColumn(PDO $db, string $table, string $column, string $defin
 
 function arenaMigrate(PDO $db): void {
     arenaEnsureColumn($db, 'arena_games', 'is_default', 'INTEGER DEFAULT 0');
+    // 表示ランク（配置期間）の導入で追加した列
+    arenaEnsureColumn($db, 'arena_ratings', 'season_games', 'INTEGER DEFAULT 0');
+    arenaEnsureColumn($db, 'arena_ratings', 'placement_done', 'INTEGER DEFAULT 0');
+    arenaEnsureColumn($db, 'arena_ratings', 'placement_done_at', 'INTEGER');
 }

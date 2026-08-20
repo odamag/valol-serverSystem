@@ -15,6 +15,7 @@ export default function ArenaRanking() {
   // scope は 'overall' | 'series' | タイトルの slug
   const [scope, setScope] = useState('overall')
   const [ranking, setRanking] = useState([])
+  const [season, setSeason] = useState(null)
   const [stats, setStats] = useState(null)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -28,7 +29,7 @@ export default function ArenaRanking() {
   useEffect(() => {
     setLoading(true)
     arenaApi.get(`/v1/ranking?game=${encodeURIComponent(scope)}`)
-      .then(d => { setRanking(d.ranking || []); setError(null) })
+      .then(d => { setRanking(d.ranking || []); setSeason(d.season || null); setError(null) })
       .catch(e => setError(errMsg(e)))
       .finally(() => setLoading(false))
   }, [scope])
@@ -43,7 +44,10 @@ export default function ArenaRanking() {
     <>
       <div className="page-header">
         <h1 className="page-title">🏆 ランキング</h1>
-        <p className="page-subtitle">タイトル別・総合・シリーズ（5番勝負）別の Elo レーティング</p>
+        <p className="page-subtitle">
+          タイトル別・総合・シリーズ（5番勝負）別のレーティング
+          {season && `　|　${season.name}（配置 ${season.placement_games} 戦）`}
+        </p>
       </div>
 
       {error && <p className="arena-error">{error}</p>}
@@ -63,6 +67,13 @@ export default function ArenaRanking() {
           ))}
         </div>
 
+        {season && ranking.some(r => r.in_placement) && (
+          <p className="arena-muted arena-placement-note">
+            配置期間中のプレイヤーはランクが確定していません。
+            {season.placement_games} 戦こなすまで、表示ランクは内部レートより最大 {season.offset_max} 低く抑えられます。
+          </p>
+        )}
+
         {loading ? <p className="arena-loading">読み込み中…</p> : (
           ranking.length === 0
             ? <p className="arena-muted">まだ記録がありません。</p>
@@ -70,17 +81,26 @@ export default function ArenaRanking() {
               <div className="arena-table-wrap">
                 <table className="arena-table">
                   <thead>
-                    <tr><th>#</th><th>プレイヤー</th><th>レート</th><th>勝敗</th><th>連勝</th><th>最高</th></tr>
+                    <tr><th>#</th><th>プレイヤー</th><th>ランク</th><th>勝敗</th><th>連勝</th><th>最高</th></tr>
                   </thead>
                   <tbody>
                     {ranking.map(r => (
-                      <tr key={r.user_id}>
+                      <tr key={r.user_id} className={r.in_placement ? 'arena-row-placement' : ''}>
                         <td>{r.rank}</td>
                         <td><Link to={`/arena/head-to-head?a=${r.user_id}`}>{r.username}</Link></td>
-                        <td><strong>{r.rating}</strong></td>
+                        <td>
+                          {r.in_placement ? (
+                            // 配置期間中は数値を出さない（確定していないランクを見せない）
+                            <span className="arena-placement-chip">
+                              配置中（残り{r.placement_remaining}戦）
+                            </span>
+                          ) : (
+                            <strong>{r.display_rating}</strong>
+                          )}
+                        </td>
                         <td>{r.wins}勝 {r.losses}敗</td>
                         <td>{r.streak > 0 ? `${r.streak}連勝` : r.streak < 0 ? `${-r.streak}連敗` : '—'}</td>
-                        <td className="arena-muted">{r.peak_rating}</td>
+                        <td className="arena-muted">{r.in_placement ? '—' : r.peak_rating}</td>
                       </tr>
                     ))}
                   </tbody>
