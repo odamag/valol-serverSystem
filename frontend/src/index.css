@@ -2829,3 +2829,6 @@ body {
   60%  { transform: scale(1.12); }
   to   { opacity: 1; transform: scale(1); }
 }
+
+.arena-placement-note p { margin: 0 0 6px; }
+.arena-placement-note p:last-child { margin-bottom: 0; }

@@ -68,10 +68,18 @@ export default function ArenaRanking() {
         </div>
 
         {season && ranking.some(r => r.in_placement) && (
-          <p className="arena-muted arena-placement-note">
-            配置期間中のプレイヤーはランクが確定していません。
-            {season.placement_games} 戦こなすまで、表示ランクは内部レートより最大 {season.offset_max} 低く抑えられます。
-          </p>
+          <div className="arena-placement-note">
+            <p>
+              <strong>配置期間中</strong>のプレイヤーはランクが確定していません。
+              {season.placement_games} 戦こなすまで、表示ランクは内部レートより最大 {season.offset_max} 低く抑えられ、
+              1 戦ごとに {season.decay} ずつ解けていきます。
+            </p>
+            <p className="arena-muted">
+              そのため配置期間中は、<strong>格上に負けた場合など表示ランクが上がることがあります</strong>。
+              レートの下がり幅（内部レート）より、1 戦ぶん解ける抑制（{season.decay}）のほうが大きいためです。
+              勝敗そのものは通常どおり内部レートに反映されています。
+            </p>
+          </div>
         )}
 
         {loading ? <p className="arena-loading">読み込み中…</p> : (

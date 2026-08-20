@@ -198,7 +198,9 @@ function PlacementRevealCard({ items, onClose }) {
           </li>
         ))}
       </ul>
-      <p className="arena-muted">ランクが確定しました。以降はレートがそのまま表示されます。</p>
+      <p className="arena-muted">
+        ランクが確定しました。以降はレートがそのまま表示され、通常どおり勝てば上がり負ければ下がります。
+      </p>
       <button className="btn btn-secondary" onClick={onClose}>閉じる</button>
     </div>
   )

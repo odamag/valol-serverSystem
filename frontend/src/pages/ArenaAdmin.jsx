@@ -558,6 +558,10 @@ function SeasonPanel() {
         <code>内部レート − max(0, (N − シーズン内試合数) × 減衰係数)</code> で低く抑え、
         N 戦に達した時点でランクを確定させます。
       </p>
+      <p className="arena-muted">
+        抑制は1戦ごとに減衰係数ぶん解けるため、<strong>配置期間中は負けても表示ランクが上がることがあります</strong>
+        （格上に負けてレートの下がり幅が減衰係数より小さいとき）。内部レートは常に通常のEloどおりに動きます。
+      </p>
       {error && <p className="arena-error">{error}</p>}
 
       <form onSubmit={save}>
