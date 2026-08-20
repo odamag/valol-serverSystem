@@ -91,7 +91,7 @@ A ban → B ban → B pick → A pick → B ban → A ban → A pick → B pick 
 
 ```
 表示ランク = 内部レート - max(0, (N - シーズン内試合数) × 減衰係数)
-減衰係数   = OFFSET_MAX / N          （既定 N=20, OFFSET_MAX=100 → 5）
+減衰係数   = OFFSET_MAX / N          （既定 N=5, OFFSET_MAX=100 → 20）
 ```
 
 - シーズン内試合数が **N に達した時点**で `placement_done` を立て、

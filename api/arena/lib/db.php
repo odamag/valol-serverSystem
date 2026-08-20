@@ -120,7 +120,7 @@ function getArenaDB(): PDO {
         CREATE TABLE IF NOT EXISTS arena_seasons (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL,
-          placement_games INTEGER NOT NULL DEFAULT 20,   -- N（配置試合数）
+          placement_games INTEGER NOT NULL DEFAULT 5,    -- N（配置試合数）
           offset_max REAL NOT NULL DEFAULT 100,          -- OFFSET_MAX（減衰係数 = OFFSET_MAX / N）
           compress_ratio REAL NOT NULL DEFAULT 0.7,      -- 次シーズンへの引き継ぎ圧縮率
           started_at INTEGER NOT NULL,

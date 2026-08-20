@@ -156,7 +156,7 @@ function arenaApplyEloForScope(
 // 表示ランクは、シーズン開始直後の「配置期間」だけ内部レートより低く抑える。
 //
 //   表示ランク = 内部レート - max(0, (N - シーズン内試合数) × 減衰係数)
-//   減衰係数   = OFFSET_MAX / N
+//   減衰係数   = OFFSET_MAX / N     （既定 N=5, OFFSET_MAX=100 → 20）
 //
 // シーズン内試合数が N に達した時点で placement_done を立て、
 // 以降シーズン終了まで「表示ランク = 内部レート」に固定する（減衰式は二度と適用しない）。
@@ -173,7 +173,7 @@ function arenaCurrentSeason(PDO $db): array {
     $now = time();
     $ins = $db->prepare('
         INSERT INTO arena_seasons (name, placement_games, offset_max, compress_ratio, started_at)
-        VALUES (?, 20, 100, 0.7, ?)
+        VALUES (?, 5, 100, 0.7, ?)
     ');
     $ins->execute(['シーズン1', $now]);
 
