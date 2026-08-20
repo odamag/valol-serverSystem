@@ -31,31 +31,47 @@ function arenaHandleRanking(array $params, PDO $db): void {
         $gameMeta = ['slug' => $game['slug'], 'name' => $game['name'], 'icon' => $game['icon']];
     }
 
+    $season = arenaCurrentSeason($db);
+
     $stmt = $db->prepare('
-        SELECT user_id, username, rating, wins, losses, streak, peak_rating, updated_at
+        SELECT user_id, username, rating, wins, losses, streak, peak_rating,
+               season_games, placement_done, updated_at
         FROM arena_ratings
         WHERE game_id = ?
-        ORDER BY rating DESC, wins DESC
-        LIMIT 100
     ');
     $stmt->execute([$gameId]);
 
-    $rank = 0;
-    $rows = array_map(function ($r) use (&$rank) {
-        $rank++;
-        return [
-            'rank'        => $rank,
+    // 並び順は「表示ランク」で決める。配置期間中は内部レートより低く抑えられるため、
+    // 数戦だけ勝ったプレイヤーが上位に来ない。
+    $rows = array_map(function ($r) use ($season) {
+        $d = arenaDecorateRatingRow($r, $season);
+        return array_merge([
             'user_id'     => (int)$r['user_id'],
             'username'    => $r['username'],
-            'rating'      => round((float)$r['rating'], 1),
             'wins'        => (int)$r['wins'],
             'losses'      => (int)$r['losses'],
             'streak'      => (int)$r['streak'],
             'peak_rating' => round((float)$r['peak_rating'], 1),
-        ];
+        ], $d);
     }, $stmt->fetchAll());
 
-    jsonResponse(['success' => true, 'game' => $gameMeta, 'ranking' => $rows]);
+    usort($rows, function ($x, $y) {
+        if ($x['display_rating'] === $y['display_rating']) {
+            return $y['wins'] - $x['wins'];
+        }
+        return $y['display_rating'] <=> $x['display_rating'];
+    });
+    $rows = array_slice($rows, 0, 100);
+    foreach ($rows as $i => $_) {
+        $rows[$i]['rank'] = $i + 1;
+    }
+
+    jsonResponse([
+        'success' => true,
+        'game'    => $gameMeta,
+        'season'  => arenaSerializeSeason($season),
+        'ranking' => $rows,
+    ]);
 }
 
 // GET /v1/players/{user_id} — 個人成績・レート一覧（read スコープのAPIキーも可）
@@ -66,6 +82,7 @@ function arenaHandlePlayer(array $params, PDO $db): void {
 
     $stmt = $db->prepare('
         SELECT r.game_id, r.rating, r.wins, r.losses, r.streak, r.peak_rating,
+               r.season_games, r.placement_done,
                g.slug AS game_slug, g.name AS game_name, g.icon AS game_icon
         FROM arena_ratings r
         LEFT JOIN arena_games g ON g.id = r.game_id
@@ -73,7 +90,8 @@ function arenaHandlePlayer(array $params, PDO $db): void {
         ORDER BY (r.game_id = 0) DESC, (r.game_id = -1) DESC, g.name
     ');
     $stmt->execute([$userId]);
-    $ratings = array_map(function ($r) {
+    $season = arenaCurrentSeason($db);
+    $ratings = array_map(function ($r) use ($season) {
         $gid = (int)$r['game_id'];
         if ($gid === 0) {
             [$slug, $name, $icon] = ['overall', '総合', '🏆'];
@@ -82,20 +100,25 @@ function arenaHandlePlayer(array $params, PDO $db): void {
         } else {
             [$slug, $name, $icon] = [$r['game_slug'], $r['game_name'], $r['game_icon']];
         }
-        return [
+        return array_merge([
             'game_id'     => $gid,
             'game_slug'   => $slug,
             'game_name'   => $name,
             'game_icon'   => $icon,
-            'rating'      => round((float)$r['rating'], 1),
             'wins'        => (int)$r['wins'],
             'losses'      => (int)$r['losses'],
             'streak'      => (int)$r['streak'],
             'peak_rating' => round((float)$r['peak_rating'], 1),
-        ];
+        ], arenaDecorateRatingRow($r, $season));
     }, $stmt->fetchAll());
 
-    jsonResponse(['success' => true, 'user_id' => $userId, 'ratings' => $ratings, 'recent_series' => []]);
+    jsonResponse([
+        'success'  => true,
+        'user_id'  => $userId,
+        'season'   => arenaSerializeSeason($season),
+        'ratings'  => $ratings,
+        'recent_series' => [],
+    ]);
 }
 
 // GET /v1/head-to-head?a={id}&b={id} — 対戦相手別の戦績。

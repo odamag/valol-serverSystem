@@ -2779,3 +2779,56 @@ body {
   cursor: pointer;
 }
 .arena-link-btn:hover { color: var(--accent-hover); }
+
+/* 配置期間（表示ランク） */
+.arena-placement-chip {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  background: rgba(245, 158, 11, 0.18);
+  color: #fcd34d;
+  white-space: nowrap;
+}
+.arena-row-placement { opacity: 0.85; }
+.arena-placement-note {
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--warning);
+  font-size: 0.85rem;
+}
+
+/* 配置期間終了の演出 */
+.arena-placement-reveal {
+  border-color: var(--warning);
+  animation: arena-reveal-in 0.5s ease-out;
+}
+@keyframes arena-reveal-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+.arena-reveal-list { list-style: none; margin: 12px 0; padding: 0; }
+.arena-reveal-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border-bottom: 1px solid var(--card-border);
+  flex-wrap: wrap;
+}
+.arena-reveal-scope { color: var(--text-muted); font-size: 0.85rem; min-width: 8em; }
+.arena-reveal-name { flex: 1; min-width: 6em; }
+.arena-reveal-rank {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--warning);
+  animation: arena-rank-pop 0.6s ease-out 0.15s both;
+}
+@keyframes arena-rank-pop {
+  from { opacity: 0; transform: scale(0.6); }
+  60%  { transform: scale(1.12); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.arena-placement-note p { margin: 0 0 6px; }
+.arena-placement-note p:last-child { margin-bottom: 0; }

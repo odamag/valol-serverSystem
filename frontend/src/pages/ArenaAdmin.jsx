@@ -492,6 +492,120 @@ function SettingsPanel() {
   )
 }
 
+// ── シーズン（表示ランクの配置期間） ──────────────────────────
+function SeasonPanel() {
+  const [season, setSeason] = useState(null)
+  const [form, setForm] = useState(null)
+  const [newName, setNewName] = useState('')
+  const [error, setError] = useState(null)
+  const [saved, setSaved] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(async () => {
+    try {
+      const d = await arenaApi.get('/v1/seasons/current')
+      setSeason(d.season)
+      setForm({
+        name: d.season.name,
+        placement_games: d.season.placement_games,
+        offset_max: d.season.offset_max,
+        compress_ratio: d.season.compress_ratio,
+      })
+    } catch (e) { setError(errMsg(e)) }
+  }, [])
+  useEffect(() => { load() }, [load])
+
+  async function save(e) {
+    e.preventDefault()
+    setBusy(true); setError(null); setSaved(false)
+    try {
+      await arenaApi.patch('/v1/admin/seasons/current', {
+        name: form.name,
+        placement_games: Number(form.placement_games),
+        offset_max: Number(form.offset_max),
+        compress_ratio: Number(form.compress_ratio),
+      })
+      await load()
+      setSaved(true)
+    } catch (e) { setError(errMsg(e)) } finally { setBusy(false) }
+  }
+
+  async function startNew(e) {
+    e.preventDefault()
+    if (!window.confirm(
+      `新シーズン「${newName}」を開始します。\n\n` +
+      `・全員の内部レートが平均値方向へ ${season.compress_ratio} 倍に圧縮されます\n` +
+      `・全員の配置期間がリセットされます\n\n` +
+      'この操作は取り消せません。よろしいですか？'
+    )) return
+    setBusy(true); setError(null)
+    try {
+      await arenaApi.post('/v1/admin/seasons', { name: newName })
+      setNewName('')
+      await load()
+    } catch (e) { setError(errMsg(e)) } finally { setBusy(false) }
+  }
+
+  if (!season || !form) return null
+
+  const decay = form.placement_games > 0 ? (form.offset_max / form.placement_games) : 0
+
+  return (
+    <div className="card arena-card">
+      <h2 className="arena-section-title">📅 シーズンと配置期間</h2>
+      <p className="arena-muted">
+        内部レート（Elo）は常に通常どおり動きます。配置期間中だけ<strong>表示ランク</strong>を
+        <code>内部レート − max(0, (N − シーズン内試合数) × 減衰係数)</code> で低く抑え、
+        N 戦に達した時点でランクを確定させます。
+      </p>
+      <p className="arena-muted">
+        抑制は1戦ごとに減衰係数ぶん解けるため、<strong>配置期間中は負けても表示ランクが上がることがあります</strong>
+        （格上に負けてレートの下がり幅が減衰係数より小さいとき）。内部レートは常に通常のEloどおりに動きます。
+      </p>
+      {error && <p className="arena-error">{error}</p>}
+
+      <form onSubmit={save}>
+        <div className="arena-form-grid">
+          <label className="arena-field">
+            <span>シーズン名</span>
+            <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required />
+          </label>
+          <label className="arena-field">
+            <span>配置試合数 N</span>
+            <input type="number" min="0" max="200" value={form.placement_games}
+                   onChange={e => setForm(f => ({ ...f, placement_games: e.target.value }))} />
+          </label>
+          <label className="arena-field">
+            <span>OFFSET_MAX</span>
+            <input type="number" min="0" max="2000" value={form.offset_max}
+                   onChange={e => setForm(f => ({ ...f, offset_max: e.target.value }))} />
+          </label>
+          <label className="arena-field">
+            <span>次シーズンへの圧縮率</span>
+            <input type="number" min="0" max="1" step="0.05" value={form.compress_ratio}
+                   onChange={e => setForm(f => ({ ...f, compress_ratio: e.target.value }))} />
+          </label>
+        </div>
+        <p className="arena-muted">
+          減衰係数 = OFFSET_MAX ÷ N = <strong>{decay.toFixed(2)}</strong>
+          （1戦目の抑制幅は最大 {Number(form.offset_max) || 0}）
+        </p>
+        <button className="btn btn-primary" disabled={busy}>{saved ? '保存しました' : '設定を保存'}</button>
+      </form>
+
+      <h3 className="arena-subsection-title">新シーズンを開始</h3>
+      <p className="arena-muted">
+        内部レートを平均値方向へ圧縮して引き継ぎ（新レート = 平均 + (旧レート − 平均) × {season.compress_ratio}）、
+        全員の配置期間をリセットします。
+      </p>
+      <form className="arena-join-row" onSubmit={startNew}>
+        <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="新しいシーズン名" />
+        <button className="btn btn-danger" disabled={busy || !newName.trim()}>シーズンを切り替える</button>
+      </form>
+    </div>
+  )
+}
+
 // ── ページ本体 ────────────────────────────────────────────────
 // arena_admins が空のうちは admin_bootstrap_available が true になり、この画面を開ける。
 // ロリポップ ライトプランには SSH が無く CLI を叩けないため、最初の管理者は
@@ -529,6 +643,7 @@ export default function ArenaAdmin() {
 
       <GamesPanel />
       <FormatsPanel />
+      <SeasonPanel />
       <SettingsPanel />
       <KeysPanel />
       <AdminsPanel />

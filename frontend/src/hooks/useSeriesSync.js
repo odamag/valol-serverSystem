@@ -16,6 +16,8 @@ export default function useSeriesSync(publicId) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [acting, setActing] = useState(false)
+  // 直近の承認で配置期間を終えたプレイヤー（UIの演出用。表示したら clear する）
+  const [placementCompleted, setPlacementCompleted] = useState([])
 
   // ポーリングのタイマークロージャから常に最新の series を読めるようにする ref
   const seriesRef = useRef(null)
@@ -89,6 +91,9 @@ export default function useSeriesSync(publicId) {
     try {
       const data = await arenaApi.post(path, body)
       applyResponse(data)
+      if (data && Array.isArray(data.placement_completed) && data.placement_completed.length > 0) {
+        setPlacementCompleted(data.placement_completed)
+      }
       return true
     } catch (e) {
       setError(e instanceof ArenaApiError ? e.message : '通信エラーが発生しました')
@@ -127,5 +132,11 @@ export default function useSeriesSync(publicId) {
     [post, publicId]
   )
 
-  return { series, draft, loading, error, acting, spinRoulette, chooseSide, act, reportGame, confirmGame, refresh }
+  const clearPlacementCompleted = useCallback(() => setPlacementCompleted([]), [])
+
+  return {
+    series, draft, loading, error, acting,
+    spinRoulette, chooseSide, act, reportGame, confirmGame, refresh,
+    placementCompleted, clearPlacementCompleted,
+  }
 }
