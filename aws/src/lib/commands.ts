@@ -13,7 +13,7 @@ import type { Weather } from './validate';
 // ── Discord Application Command の型（register-commands.ts が PUT するJSONの形） ──────────
 //
 // ApplicationCommandOptionType（Discord API）:
-//   1 = SUB_COMMAND, 3 = STRING, 4 = INTEGER, 10 = NUMBER
+//   1 = SUB_COMMAND, 3 = STRING, 4 = INTEGER, 7 = CHANNEL, 8 = ROLE, 10 = NUMBER
 
 export interface CommandChoice<T extends string = string> {
   name: string;
@@ -37,6 +37,11 @@ export interface ApplicationCommand {
   description: string;
   type: number; // 1 = CHAT_INPUT
   options?: ApplicationCommandOption[];
+  // Phase 3: '/run-admin' 用。ADMINISTRATOR ビット（0x8）を渡すと、Discord のUI上は
+  // 非管理者にコマンド自体が表示されなくなる。ただし、これはあくまでクライアント側の表示制御に
+  // すぎず、サーバー側で権限を保証するものではないため、ハンドラ側（worker.ts）でも
+  // interaction.member.permissions を必ず検証すること（hasAdminPermission 参照）。
+  default_member_permissions?: string;
 }
 
 // ── コマンド名・サブコマンド名・オプション名の定数 ──────────────────────────────
@@ -63,6 +68,21 @@ export const OPT_RECORD = 'record';
 export const OPT_SCOPE = 'scope';
 export const OPT_PERIOD = 'period';
 export const OPT_MONTH = 'month';
+
+// ── /run-admin（Phase 3: ロール自動付与の管理コマンド） ──────────────────────────
+
+export const RUN_ADMIN_COMMAND_NAME = 'run-admin';
+
+export const SUB_ADMIN_THRESHOLD_SET = 'threshold-set';
+export const SUB_ADMIN_THRESHOLD_REMOVE = 'threshold-remove';
+export const SUB_ADMIN_TOP_ROLE_SET = 'top-role-set';
+export const SUB_ADMIN_CHANNEL_SET = 'channel-set';
+export const SUB_ADMIN_SHOW = 'show';
+export const SUB_ADMIN_RECALC = 'recalc';
+
+export const OPT_KM = 'km';
+export const OPT_ROLE = 'role';
+export const OPT_CHANNEL = 'channel';
 
 /** 天気の選択肢（表示は日本語、値は validate.ts の Weather と一致させる）。 */
 export const WEATHER_CHOICES: CommandChoice<Weather>[] = [
@@ -241,6 +261,92 @@ export const RUN_COMMAND: ApplicationCommand = {
   ],
 };
 
+/**
+ * `/run-admin` コマンドの全体定義（Phase 3: 閾値ロール・月間1位ロールなどの管理用）。
+ * default_member_permissions で ADMINISTRATOR を要求するが、これは表示制御のみなので
+ * worker.ts 側でも hasAdminPermission による検証を必ず行う（ApplicationCommand のコメント参照）。
+ */
+export const RUN_ADMIN_COMMAND: ApplicationCommand = {
+  name: RUN_ADMIN_COMMAND_NAME,
+  description: 'ランニング記録ロールの管理コマンド（管理者用）',
+  type: 1,
+  default_member_permissions: '8', // ADMINISTRATOR ビット
+  options: [
+    {
+      type: 1,
+      name: SUB_ADMIN_THRESHOLD_SET,
+      description: '距離達成ロールを設定します',
+      options: [
+        {
+          type: 4, // INTEGER
+          name: OPT_KM,
+          description: '達成距離(km)',
+          required: true,
+          min_value: 1,
+        },
+        {
+          type: 8, // ROLE
+          name: OPT_ROLE,
+          description: '付与するロール',
+          required: true,
+        },
+      ],
+    },
+    {
+      type: 1,
+      name: SUB_ADMIN_THRESHOLD_REMOVE,
+      description: '距離達成ロールの設定を削除します',
+      options: [
+        {
+          type: 4,
+          name: OPT_KM,
+          description: '削除する達成距離(km)',
+          required: true,
+          min_value: 1,
+        },
+      ],
+    },
+    {
+      type: 1,
+      name: SUB_ADMIN_TOP_ROLE_SET,
+      description: '月間1位ロールを設定します',
+      options: [
+        {
+          type: 8, // ROLE
+          name: OPT_ROLE,
+          description: '月間1位に付与するロール',
+          required: true,
+        },
+      ],
+    },
+    {
+      type: 1,
+      name: SUB_ADMIN_CHANNEL_SET,
+      description: 'ロール達成の告知チャンネルを設定します',
+      options: [
+        {
+          type: 7, // CHANNEL
+          name: OPT_CHANNEL,
+          description: '告知先チャンネル',
+          required: true,
+        },
+      ],
+    },
+    {
+      type: 1,
+      name: SUB_ADMIN_SHOW,
+      description: '現在のロール設定を表示します',
+      options: [],
+    },
+    {
+      type: 1,
+      name: SUB_ADMIN_RECALC,
+      description: '集計とロールを再計算して整合させます',
+      options: [],
+    },
+  ],
+};
+
 // ── 時間・ペースのフォーマット / パース ────────────────────────────────────
 // worker.ts（記録の登録・表示）と interactions.ts（削除候補のオートコンプリート表示）の
 // 両方から使うため、ここに集約する。
@@ -321,6 +427,21 @@ export interface DiscordUser {
 export interface DiscordMember {
   user: DiscordUser;
   nick?: string | null;
+  // ギルド内での実行時委任権限のビットフラグ。10進文字列で来る（Discord の仕様。ビット数が
+  // JS の number の安全整数範囲を超えうるため、扱う側は必ず BigInt に変換すること）。
+  // Phase 3 の /run-admin 権限チェック（hasAdminPermission, roles.ts）で使う。
+  permissions?: string;
+}
+
+/** interaction.data.resolved に含まれるロール/チャンネルの最小表現（表示名の逆引き用）。 */
+export interface DiscordResolvedRole {
+  id: string;
+  name: string;
+}
+
+export interface DiscordResolvedChannel {
+  id: string;
+  name: string;
 }
 
 export interface DiscordInteractionOption {
@@ -335,6 +456,12 @@ export interface DiscordInteractionOption {
 export interface DiscordInteractionData {
   name: string;
   options?: DiscordInteractionOption[];
+  // ROLE/CHANNEL 型のオプション値は snowflake の ID しか渡ってこないため、表示名が必要な場合
+  // （/run-admin threshold-set 等でロール名を保存したいとき）はここから逆引きする。
+  resolved?: {
+    roles?: Record<string, DiscordResolvedRole>;
+    channels?: Record<string, DiscordResolvedChannel>;
+  };
 }
 
 export interface DiscordInteraction {

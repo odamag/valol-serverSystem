@@ -2,12 +2,17 @@
 //
 // PUT https://discord.com/api/v10/applications/{APP_ID}/guilds/{GUILD_ID}/commands
 // で登録済みコマンドを一括上書きする。差分管理はしない（このリクエストに含まれないコマンドは
-// Discord 側で自動的に削除される）ので、commands.ts の RUN_COMMAND を唯一の正として運用できる。
+// Discord 側で自動的に削除される）ので、commands.ts のコマンド定義を唯一の正として運用できる。
+// 逆に言うと、ここに並べ忘れたコマンドは Discord から消える（あるいは最初から出てこない）。
+// commands.ts にコマンドを足したら、必ず COMMANDS にも足すこと。
 //
 // 実行方法: `npm run register`（aws/.env に DISCORD_APP_ID / DISCORD_GUILD_ID / DISCORD_BOT_TOKEN を
 // 用意しておくこと。aws/.env.example を参照）。
 
-import { RUN_COMMAND } from '../src/lib/commands';
+import { RUN_COMMAND, RUN_ADMIN_COMMAND } from '../src/lib/commands';
+
+// 登録するコマンドの全量。PUT は一括上書きなので、この配列に無いものは Discord から消える。
+const COMMANDS = [RUN_COMMAND, RUN_ADMIN_COMMAND];
 
 async function main(): Promise<void> {
   const appId = process.env.DISCORD_APP_ID;
@@ -30,8 +35,7 @@ async function main(): Promise<void> {
       authorization: `Bot ${botToken}`,
       'content-type': 'application/json',
     },
-    // ギルドコマンドの登録では配列全体で一括上書きするため、要素は RUN_COMMAND の1つだけでよい。
-    body: JSON.stringify([RUN_COMMAND]),
+    body: JSON.stringify(COMMANDS),
   });
 
   const bodyText = await res.text();

@@ -7,9 +7,10 @@ import { verifyHmac } from '../lib/verify-hmac';
 import { validateCreateRecord, validateUpdateRecord } from '../lib/validate';
 import { createRecord, deleteRecord, getSummary, listRecords, updateRecord } from '../lib/records';
 import { monthKey, todayJst } from '../lib/jst';
-import { type AggScope } from '../lib/keys';
+import { type AggScope, parseRecordId } from '../lib/keys';
 import { getLeaderboard, getMyRank, pickNextThreshold, resolvePeriod } from '../lib/leaderboard';
 import { getSettings } from '../lib/settings';
+import { syncThresholdRole } from '../lib/roles';
 
 // フロントエンド（ブラウザ）が PHP プロキシ（api/running/index.php）経由で叩く Web API（ANY /v1/{proxy+}）。
 //
@@ -125,6 +126,15 @@ async function handleCreateRecord(
   }
 
   const record = await createRecord(discordId, userName, 'web', result.value);
+
+  // ロール同期はベストエフォート: 記録は既にコミット済みのため、ここで失敗しても
+  // 記録の保存自体を巻き戻してはいけない。ログにだけ残し、レスポンスは成功のまま返す。
+  try {
+    await syncThresholdRole(discordId, record.runDate);
+  } catch (err) {
+    console.error('[api] syncThresholdRole failed after createRecord', err);
+  }
+
   return jsonResponse(200, { success: true, record });
 }
 
@@ -152,6 +162,21 @@ async function handleUpdateRecord(
     return jsonResponse(409, { success: false, message: '他の端末で更新されました。再読み込みしてください' });
   }
 
+  // ロール同期はベストエフォート（理由は handleCreateRecord 参照）。
+  // runDate が変わる編集では新旧どちらの月が当月かでロールへの影響が変わりうるため、
+  // 編集前後両方の runDate で同期を試みる（syncThresholdRole 自身が当月以外はスキップする）。
+  // 編集前の runDate は id（"<runDate>_<hex>" 形式。runDate 変更時は id 自体が変わるため、
+  // ここで受け取った id が編集前のもの）から復元できる。
+  try {
+    const oldParsed = parseRecordId(id);
+    if (oldParsed) {
+      await syncThresholdRole(discordId, oldParsed.runDate);
+    }
+    await syncThresholdRole(discordId, updated.record.runDate);
+  } catch (err) {
+    console.error('[api] syncThresholdRole failed after updateRecord', err);
+  }
+
   return jsonResponse(200, { success: true, record: updated.record });
 }
 
@@ -174,6 +199,16 @@ async function handleDeleteRecord(
       return jsonResponse(404, { success: false, message: '記録が見つかりません' });
     }
     return jsonResponse(409, { success: false, message: '他の端末で更新されました。再読み込みしてください' });
+  }
+
+  // ロール同期はベストエフォート（理由は handleCreateRecord 参照）。
+  const parsed = parseRecordId(id);
+  if (parsed) {
+    try {
+      await syncThresholdRole(discordId, parsed.runDate);
+    } catch (err) {
+      console.error('[api] syncThresholdRole failed after deleteRecord', err);
+    }
   }
 
   return jsonResponse(200, { success: true });

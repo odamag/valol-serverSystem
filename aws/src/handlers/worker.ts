@@ -17,7 +17,8 @@ import { type AggScope, parseRecordId, recordSk, userPk } from '../lib/keys';
 import { monthKey, todayJst } from '../lib/jst';
 import { getLeaderboard, getMyRank, pickNextThreshold, resolvePeriod } from '../lib/leaderboard';
 import { createRecord, deleteRecord, getSummary, listRecords } from '../lib/records';
-import { getSettings } from '../lib/settings';
+import { getSettings, updateSettings, type Threshold } from '../lib/settings';
+import { hasAdminPermission, recalcAll, syncThresholdRole } from '../lib/roles';
 import { validateCreateRecord } from '../lib/validate';
 import { followup } from '../lib/discord-rest';
 import {
@@ -25,21 +26,31 @@ import {
   type DiscordInteractionOption,
   LIST_RECENT_LIMIT,
   RANK_DISPLAY_LIMIT,
+  RUN_ADMIN_COMMAND_NAME,
   SUB_ADD,
+  SUB_ADMIN_CHANNEL_SET,
+  SUB_ADMIN_RECALC,
+  SUB_ADMIN_SHOW,
+  SUB_ADMIN_THRESHOLD_REMOVE,
+  SUB_ADMIN_THRESHOLD_SET,
+  SUB_ADMIN_TOP_ROLE_SET,
   SUB_DELETE,
   SUB_LIST,
   SUB_ME,
   SUB_RANK,
   SUB_WEB,
+  OPT_CHANNEL,
   OPT_COURSE,
   OPT_DATE,
   OPT_DISTANCE,
   OPT_HR,
   OPT_KCAL,
+  OPT_KM,
   OPT_MEMO,
   OPT_MONTH,
   OPT_PERIOD,
   OPT_RECORD,
+  OPT_ROLE,
   OPT_SCOPE,
   OPT_TIME,
   OPT_WEATHER,
@@ -122,6 +133,15 @@ async function handleAdd(
   }
 
   const record = await createRecord(discordId, userName, 'discord', result.value);
+
+  // ロール同期はベストエフォート: 記録は既に DynamoDB へコミット済みのため、
+  // ここで失敗しても記録の保存自体を巻き戻してはいけない。ログにだけ残し、
+  // ユーザーへの応答（followup）は通常どおり成功として返す。
+  try {
+    await syncThresholdRole(discordId, record.runDate);
+  } catch (err) {
+    console.error('[worker] syncThresholdRole failed after createRecord', err);
+  }
 
   const fields: { name: string; value: string; inline?: boolean }[] = [
     { name: '距離', value: `${record.distanceKm}km`, inline: true },
@@ -207,6 +227,13 @@ async function handleDelete(
       await replyText(interaction, '他の操作と競合しました。もう一度お試しください');
     }
     return;
+  }
+
+  // ロール同期はベストエフォート（理由は handleAdd 参照）。記録の削除自体は既に完了している。
+  try {
+    await syncThresholdRole(discordId, parsed.runDate);
+  } catch (err) {
+    console.error('[worker] syncThresholdRole failed after deleteRecord', err);
   }
 
   const distanceKm = item.distanceM / 1000;
@@ -347,6 +374,181 @@ async function handleWeb(interaction: DiscordInteraction): Promise<void> {
   await replyText(interaction, `Web版のランニング記録はこちらから開けます:\n${SITE_ORIGIN}`);
 }
 
+// ── /run-admin（Phase 3: ロール自動付与の管理コマンド） ──────────────────────
+
+/** `/run-admin threshold-set`: km→ロールの対応を1件追加/上書きする。 */
+async function handleAdminThresholdSet(
+  interaction: DiscordInteraction,
+  options: DiscordInteractionOption[],
+): Promise<void> {
+  const km = optionValue(options, OPT_KM);
+  const roleId = optionValue(options, OPT_ROLE);
+
+  if (typeof km !== 'number' || !Number.isInteger(km) || km < 1) {
+    await replyText(interaction, 'km は1以上の整数で指定してください');
+    return;
+  }
+  if (typeof roleId !== 'string') {
+    await replyText(interaction, 'role を指定してください');
+    return;
+  }
+
+  // ROLE 型オプションの値は snowflake の ID のみなので、表示名は resolved から逆引きする
+  // （/run-admin show が ID だけでは読めないため、roleName として保存しておく）。
+  const roleName = interaction.data?.resolved?.roles?.[roleId]?.name ?? roleId;
+
+  const settings = await getSettings();
+  const nextThresholds: Threshold[] = [
+    ...settings.thresholds.filter((t) => t.km !== km),
+    { km, roleId, roleName },
+  ];
+  await updateSettings({ thresholds: nextThresholds });
+
+  await replyText(interaction, `${km}km 達成ロールを「${roleName}」に設定しました`);
+}
+
+/** `/run-admin threshold-remove`: km→ロールの対応を1件削除する。 */
+async function handleAdminThresholdRemove(
+  interaction: DiscordInteraction,
+  options: DiscordInteractionOption[],
+): Promise<void> {
+  const km = optionValue(options, OPT_KM);
+  if (typeof km !== 'number') {
+    await replyText(interaction, 'km を指定してください');
+    return;
+  }
+
+  const settings = await getSettings();
+  const nextThresholds = settings.thresholds.filter((t) => t.km !== km);
+  if (nextThresholds.length === settings.thresholds.length) {
+    await replyText(interaction, `${km}km の閾値は設定されていません`);
+    return;
+  }
+
+  await updateSettings({ thresholds: nextThresholds });
+  await replyText(interaction, `${km}km 達成ロールの設定を削除しました`);
+}
+
+/** `/run-admin top-role-set`: 月間1位ロールを設定する。 */
+async function handleAdminTopRoleSet(
+  interaction: DiscordInteraction,
+  options: DiscordInteractionOption[],
+): Promise<void> {
+  const roleId = optionValue(options, OPT_ROLE);
+  if (typeof roleId !== 'string') {
+    await replyText(interaction, 'role を指定してください');
+    return;
+  }
+
+  const roleName = interaction.data?.resolved?.roles?.[roleId]?.name ?? roleId;
+  await updateSettings({ monthlyTopRoleId: roleId, monthlyTopRoleName: roleName });
+
+  await replyText(interaction, `月間1位ロールを「${roleName}」に設定しました`);
+}
+
+/**
+ * `/run-admin channel-set`: 告知チャンネルを設定する。
+ * settings.ts にはチャンネル名を保存するフィールドが無いため（roleName/monthlyTopRoleName
+ * のような専用フィールドを増やすのは今回のスコープ外）、表示には Discord のチャンネルメンション
+ * `<#id>` を使う。メンションはクライアント側でチャンネル名として自動的にレンダリングされるため、
+ * ID を保存するだけで /run-admin show でも人が読める表示にできる。
+ */
+async function handleAdminChannelSet(
+  interaction: DiscordInteraction,
+  options: DiscordInteractionOption[],
+): Promise<void> {
+  const channelId = optionValue(options, OPT_CHANNEL);
+  if (typeof channelId !== 'string') {
+    await replyText(interaction, 'channel を指定してください');
+    return;
+  }
+
+  await updateSettings({ announceChannelId: channelId });
+  await replyText(interaction, `告知チャンネルを <#${channelId}> に設定しました`);
+}
+
+/** `/run-admin show`: 現在の設定を表示する。 */
+async function handleAdminShow(interaction: DiscordInteraction): Promise<void> {
+  const settings = await getSettings();
+
+  const thresholdValue =
+    settings.thresholds.length > 0
+      ? settings.thresholds.map((t) => `${t.km}km → ${t.roleName}`).join('\n')
+      : '（未設定）';
+
+  let topRoleValue = '（未設定）';
+  if (settings.monthlyTopRoleId) {
+    topRoleValue = settings.monthlyTopRoleName ?? settings.monthlyTopRoleId;
+    if (settings.topHolderDiscordId) {
+      topRoleValue += `\n現在の保持者: <@${settings.topHolderDiscordId}>（${settings.topRoleMonth ?? '-'}分）`;
+    }
+  }
+
+  const channelValue = settings.announceChannelId ? `<#${settings.announceChannelId}>` : '（未設定）';
+
+  await followup(interaction.application_id, interaction.token, {
+    embeds: [
+      {
+        title: 'ランニング記録ロール設定',
+        color: EMBED_COLOR,
+        fields: [
+          { name: '閾値ロール', value: thresholdValue },
+          { name: '月間1位ロール', value: topRoleValue },
+          { name: '告知チャンネル', value: channelValue },
+        ],
+      },
+    ],
+  });
+}
+
+/** `/run-admin recalc`: 全ユーザーの当月集計から閾値ロールを再計算する。 */
+async function handleAdminRecalc(interaction: DiscordInteraction): Promise<void> {
+  await recalcAll();
+  await replyText(interaction, '集計とロールの再計算が完了しました');
+}
+
+/**
+ * `/run-admin` のディスパッチ。
+ * default_member_permissions（commands.ts）は Discord UI 上の表示制御にすぎないため、
+ * ここで member.permissions のビットを検証して初めて権限保証になる。
+ * DM 実行時は member 自体が無い（permissions が undefined）ので、常に拒否される。
+ */
+async function dispatchAdmin(interaction: DiscordInteraction): Promise<void> {
+  if (!hasAdminPermission(interaction.member?.permissions)) {
+    await replyText(interaction, 'このコマンドは管理者のみ使用できます');
+    return;
+  }
+
+  const sub = getSubcommand(interaction.data);
+  if (!sub) {
+    await replyText(interaction, 'エラーが発生しました');
+    return;
+  }
+
+  switch (sub.name) {
+    case SUB_ADMIN_THRESHOLD_SET:
+      await handleAdminThresholdSet(interaction, sub.options);
+      return;
+    case SUB_ADMIN_THRESHOLD_REMOVE:
+      await handleAdminThresholdRemove(interaction, sub.options);
+      return;
+    case SUB_ADMIN_TOP_ROLE_SET:
+      await handleAdminTopRoleSet(interaction, sub.options);
+      return;
+    case SUB_ADMIN_CHANNEL_SET:
+      await handleAdminChannelSet(interaction, sub.options);
+      return;
+    case SUB_ADMIN_SHOW:
+      await handleAdminShow(interaction);
+      return;
+    case SUB_ADMIN_RECALC:
+      await handleAdminRecalc(interaction);
+      return;
+    default:
+      await replyText(interaction, '未対応のコマンドです');
+  }
+}
+
 async function dispatch(interaction: DiscordInteraction): Promise<void> {
   const discordId = getInteractionUserId(interaction);
   const userName = getInteractionUserName(interaction);
@@ -356,6 +558,13 @@ async function dispatch(interaction: DiscordInteraction): Promise<void> {
     // 万一に備えてスタックトレース等は出さずに日本語エラーだけ返す。
     console.error('[worker] interaction has neither member nor user', JSON.stringify(interaction));
     await replyText(interaction, 'エラーが発生しました');
+    return;
+  }
+
+  // `/run-admin` はトップレベルの別コマンド（サブコマンド名が /run と重複しないよう
+  // commands.ts で管理しているが、コマンド名自体で明示的に分岐させておいたほうが安全）。
+  if (interaction.data?.name === RUN_ADMIN_COMMAND_NAME) {
+    await dispatchAdmin(interaction);
     return;
   }
 
