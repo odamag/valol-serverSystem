@@ -331,6 +331,19 @@ RunningApp.HttpApiUrl = https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.
 > 鶏と卵の関係になってしまう。そのため、A で作った IAM 管理者ユーザーの認証情報を使って
 > 自分のマシンから1回だけ手動デプロイする。
 
+デプロイの前に、`aws/cdk.json` の `context.githubRepo` が自分のリポジトリと
+一致しているか確認する（既定値は `odamag/serverSystem`）。
+
+```jsonc
+"githubRepo": "odamag/serverSystem"
+```
+
+> この値は IAM ロールの信頼ポリシーに `repo:<owner>/<repo>:ref:refs/heads/main` として
+> 埋め込まれ、「main ブランチからのデプロイだけを許可する」制限を AWS 側で強制するために使う。
+> **ここが実際のリポジトリと違っていてもデプロイ自体は成功してしまい、後で GitHub Actions が
+> AssumeRole に失敗して初めて発覚する**（`Not authorized to perform sts:AssumeRoleWithWebIdentity`）。
+> 原因が分かりにくいので、先に確認しておくこと。
+
 ```bash
 cd aws
 npx cdk deploy RunningGithubOidc --profile running
