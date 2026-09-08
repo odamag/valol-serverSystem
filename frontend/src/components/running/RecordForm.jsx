@@ -1,51 +1,8 @@
 import { useState } from 'react'
 import runningApi, { RunningApiError } from '../../lib/runningApi.js'
+import { WEATHER_OPTIONS, todayJst, parseDurationToSeconds, paceLabel } from '../../lib/runningFormat.js'
 
-const WEATHER_OPTIONS = [
-  { value: '',       label: '未選択' },
-  { value: 'sunny',  label: '晴れ' },
-  { value: 'cloudy', label: '曇り' },
-  { value: 'rain',   label: '雨' },
-  { value: 'snow',   label: '雪' },
-  { value: 'windy',  label: '風強い' },
-  { value: 'indoor', label: '室内' },
-]
-
-// JST の今日を "YYYY-MM-DD" で返す。
-// new Date() のローカル時刻は JST 前提でよいが、toISOString() は UTC に
-// 変換されてしまい日付がずれることがあるため、ローカルの年月日から組み立てる。
-function todayJst() {
-  const d = new Date()
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-// "26:30"（mm:ss）または "1:05:12"（hh:mm:ss）を秒に変換する。
-// パースできなければ null を返す。
-function parseDurationToSeconds(text) {
-  const parts = text.trim().split(':')
-  if (parts.length !== 2 && parts.length !== 3) return null
-  if (!parts.every(p => /^\d{1,3}$/.test(p))) return null
-  const nums = parts.map(Number)
-  if (parts.length === 2) {
-    const [mm, ss] = nums
-    if (ss > 59) return null
-    return mm * 60 + ss
-  }
-  const [hh, mm, ss] = nums
-  if (mm > 59 || ss > 59) return null
-  return hh * 3600 + mm * 60 + ss
-}
-
-// ペースの表示用プレビュー。あくまで入力中の目安であり、
-// 保存される値（paceSPerKm）の正はサーバー側で計算される。
-function paceLabel(distanceKm, durationSec) {
-  if (!distanceKm || !durationSec) return '—'
-  const s = Math.round(durationSec / distanceKm)
-  return `${Math.floor(s / 60)}'${String(s % 60).padStart(2, '0')}"`
-}
+// 時間のパース・天候の選択肢・ペース整形は編集フォームと共有する（lib/runningFormat.js）
 
 export default function RecordForm({ onSubmitted }) {
   const [distanceKm, setDistanceKm] = useState('')

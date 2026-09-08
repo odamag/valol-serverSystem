@@ -19,6 +19,8 @@ import ArenaSeries from './pages/ArenaSeries.jsx'
 import ArenaRanking from './pages/ArenaRanking.jsx'
 import ArenaHeadToHead from './pages/ArenaHeadToHead.jsx'
 import RunningHome from './pages/RunningHome.jsx'
+import RunningRanking from './pages/RunningRanking.jsx'
+import RunningRecords from './pages/RunningRecords.jsx'
 
 export const AuthContext = createContext(null)
 
@@ -92,6 +94,14 @@ function App() {
               <Route
                 path="running"
                 element={auth.loggedIn ? <RunningHome /> : <Navigate to="/login" replace />}
+              />
+              <Route
+                path="running/ranking"
+                element={auth.loggedIn ? <RunningRanking /> : <Navigate to="/login" replace />}
+              />
+              <Route
+                path="running/records"
+                element={auth.loggedIn ? <RunningRecords /> : <Navigate to="/login" replace />}
               />
             </Route>
             <Route path="*" element={<Navigate to="/server" replace />} />

@@ -6,6 +6,10 @@ import { jsonResponse } from '../lib/respond';
 import { verifyHmac } from '../lib/verify-hmac';
 import { validateCreateRecord, validateUpdateRecord } from '../lib/validate';
 import { createRecord, deleteRecord, getSummary, listRecords, updateRecord } from '../lib/records';
+import { monthKey, todayJst } from '../lib/jst';
+import { type AggScope } from '../lib/keys';
+import { getLeaderboard, getMyRank, pickNextThreshold, resolvePeriod } from '../lib/leaderboard';
+import { getSettings } from '../lib/settings';
 
 // フロントエンド（ブラウザ）が PHP プロキシ（api/running/index.php）経由で叩く Web API（ANY /v1/{proxy+}）。
 //
@@ -53,10 +57,14 @@ export const handler = async (
       return await handleGetSummary(event, discordId);
     }
 
-    // Phase 2 以降で実装予定のエンドポイント。まだ何もできないことを明示するスタブ。
-    if ((path === '/v1/ranking' || path === '/v1/settings') && method === 'GET') {
-      return jsonResponse(501, { success: false, message: 'この機能はまだ利用できません' });
+    if (path === '/v1/ranking' && method === 'GET') {
+      return await handleGetRanking(event, discordId);
     }
+    if (path === '/v1/settings' && method === 'GET') {
+      return await handleGetSettings();
+    }
+
+    // Phase 4 で実装予定のエンドポイント。まだ何もできないことを明示するスタブ。
     if (PHOTO_PATH_RE.test(path) && method === 'POST') {
       return jsonResponse(501, { success: false, message: 'この機能はまだ利用できません' });
     }
@@ -185,6 +193,69 @@ async function handleGetSummary(
     month = qs.month;
   }
 
-  const summary = await getSummary(discordId, month);
-  return jsonResponse(200, { success: true, ...summary });
+  // records.ts の getSummary は Phase 1 実装のため month.rank / nextThreshold を常に null で返す
+  // （records.ts はランニング記録の集計ロジックのみに責務を絞る）。
+  // Phase 2 分のランキング順位（leaderboard.ts）と閾値ロール（settings.ts）はここで計算して上書きする。
+  const ym = month ?? monthKey(todayJst());
+
+  const [summary, myRank, settings] = await Promise.all([
+    getSummary(discordId, month),
+    getMyRank('month', ym, discordId),
+    getSettings(),
+  ]);
+
+  // distanceKm(= distanceM/1000) から distanceM を復元する。distanceM は保存時に整数メートルだったので、
+  // Math.round で誤差なく元の値に戻せる（浮動小数点の丸め誤差は round で吸収される）。
+  const monthDistanceM = Math.round(summary.month.distanceKm * 1000);
+
+  return jsonResponse(200, {
+    success: true,
+    ...summary,
+    month: { ...summary.month, rank: myRank ? myRank.rank : null },
+    nextThreshold: pickNextThreshold(monthDistanceM, settings.thresholds),
+  });
+}
+
+const RANKING_SCOPES: AggScope[] = ['month', 'week', 'total'];
+
+async function handleGetRanking(
+  event: APIGatewayProxyEventV2,
+  discordId: string,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const qs = event.queryStringParameters ?? {};
+
+  const scopeRaw = qs.scope ?? 'month';
+  if (!RANKING_SCOPES.includes(scopeRaw as AggScope)) {
+    return jsonResponse(400, { success: false, message: 'scope は month・week・total のいずれかで指定してください' });
+  }
+  const scope = scopeRaw as AggScope;
+
+  let limit = 20;
+  if (qs.limit !== undefined) {
+    const n = Number(qs.limit);
+    if (!Number.isInteger(n) || n < 1 || n > 50) {
+      return jsonResponse(400, { success: false, message: 'limit は 1〜50 の整数で指定してください' });
+    }
+    limit = n;
+  }
+
+  const resolved = resolvePeriod(scope, qs.period);
+  if (!resolved.ok) {
+    return jsonResponse(400, { success: false, message: resolved.message });
+  }
+  const period = resolved.period ?? undefined;
+
+  const [entries, me] = await Promise.all([
+    getLeaderboard(scope, period, limit),
+    getMyRank(scope, period, discordId),
+  ]);
+
+  return jsonResponse(200, { success: true, scope, period: resolved.period, entries, me });
+}
+
+async function handleGetSettings(): Promise<APIGatewayProxyStructuredResultV2> {
+  const settings = await getSettings();
+  // roleId は Discord 内部IDなので Web には露出させない（document/running_api.md §4）。
+  const thresholds = settings.thresholds.map((t) => ({ km: t.km, roleName: t.roleName }));
+  return jsonResponse(200, { success: true, thresholds });
 }

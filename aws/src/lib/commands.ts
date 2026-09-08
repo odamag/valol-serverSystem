@@ -7,6 +7,7 @@
 // discord-api-types 等の外部パッケージには依存せず、このボットが実際に使うフィールドだけを
 // 手書きの最小限の型として定義する（package.json に依存を増やさないため）。
 
+import type { AggScope } from './keys';
 import type { Weather } from './validate';
 
 // ── Discord Application Command の型（register-commands.ts が PUT するJSONの形） ──────────
@@ -47,6 +48,8 @@ export const SUB_ADD = 'add';
 export const SUB_LIST = 'list';
 export const SUB_DELETE = 'delete';
 export const SUB_WEB = 'web';
+export const SUB_RANK = 'rank';
+export const SUB_ME = 'me';
 
 export const OPT_DISTANCE = 'distance';
 export const OPT_TIME = 'time';
@@ -57,6 +60,9 @@ export const OPT_HR = 'hr';
 export const OPT_KCAL = 'kcal';
 export const OPT_MEMO = 'memo';
 export const OPT_RECORD = 'record';
+export const OPT_SCOPE = 'scope';
+export const OPT_PERIOD = 'period';
+export const OPT_MONTH = 'month';
 
 /** 天気の選択肢（表示は日本語、値は validate.ts の Weather と一致させる）。 */
 export const WEATHER_CHOICES: CommandChoice<Weather>[] = [
@@ -71,6 +77,35 @@ export const WEATHER_CHOICES: CommandChoice<Weather>[] = [
 /** WEATHER_CHOICES から値→日本語ラベルを逆引きする（Embed 表示用）。見つからなければ undefined。 */
 export function weatherLabel(value: string | null | undefined): string | undefined {
   return WEATHER_CHOICES.find((c) => c.value === value)?.name;
+}
+
+/** ランキングの対象範囲の選択肢（表示は日本語、値は keys.ts の AggScope と一致させる）。 */
+export const SCOPE_CHOICES: CommandChoice<AggScope>[] = [
+  { name: '月間', value: 'month' },
+  { name: '週間', value: 'week' },
+  { name: '通算', value: 'total' },
+];
+
+/** SCOPE_CHOICES から値→日本語ラベルを逆引きする（Embed 表示用）。見つからなければ scope をそのまま返す。 */
+export function scopeLabel(scope: AggScope): string {
+  return SCOPE_CHOICES.find((c) => c.value === scope)?.name ?? scope;
+}
+
+/** `/run rank` の表示件数（上位何件を Embed に表示するか）。 */
+export const RANK_DISPLAY_LIMIT = 10;
+
+/** 1〜3位に付けるメダル絵文字。4位以降は空文字（呼び出し側で "順位." のような表記にフォールバックする）。 */
+export function medalForRank(rank: number): string {
+  switch (rank) {
+    case 1:
+      return '🥇';
+    case 2:
+      return '🥈';
+    case 3:
+      return '🥉';
+    default:
+      return '';
+  }
 }
 
 // `/run list` に `page` オプションを設けない理由:
@@ -172,6 +207,36 @@ export const RUN_COMMAND: ApplicationCommand = {
       name: SUB_WEB,
       description: 'Web版のランニング記録ページを開きます',
       options: [],
+    },
+    {
+      type: 1,
+      name: SUB_RANK,
+      description: 'ランキングを表示します',
+      options: [
+        {
+          type: 3, // STRING
+          name: OPT_SCOPE,
+          description: '対象範囲（既定: 月間）',
+          choices: SCOPE_CHOICES,
+        },
+        {
+          type: 3,
+          name: OPT_PERIOD,
+          description: '対象期間 例: 2026-09（省略時は今期）',
+        },
+      ],
+    },
+    {
+      type: 1,
+      name: SUB_ME,
+      description: '自分の集計・順位を表示します',
+      options: [
+        {
+          type: 3,
+          name: OPT_MONTH,
+          description: '対象月 YYYY-MM（省略時は今月）',
+        },
+      ],
     },
   ],
 };

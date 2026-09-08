@@ -2,22 +2,10 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import runningApi, { RunningApiError } from '../lib/runningApi.js'
 import RecordForm from '../components/running/RecordForm.jsx'
+import { formatDuration, formatPace } from '../lib/runningFormat.js'
 
 function errMsg(e) {
   return e instanceof RunningApiError ? e.message : '通信エラーが発生しました'
-}
-
-function formatDuration(s) {
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  const sec = s % 60
-  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
-  return `${m}:${String(sec).padStart(2, '0')}`
-}
-
-function formatPace(paceSPerKm) {
-  if (!paceSPerKm) return '—'
-  return `${Math.floor(paceSPerKm / 60)}'${String(paceSPerKm % 60).padStart(2, '0')}"`
 }
 
 export default function RunningHome() {
@@ -100,8 +88,16 @@ export default function RunningHome() {
             <RecordForm onSubmitted={load} />
           </div>
 
+          <div className="running-nav-links">
+            <Link to="/running/ranking" className="btn btn-secondary">🏆 ランキングを見る</Link>
+            <Link to="/running/records" className="btn btn-secondary">📋 記録一覧を見る</Link>
+          </div>
+
           <div className="card running-card">
-            <h2 className="running-section-title">直近の記録</h2>
+            <div className="running-section-header">
+              <h2 className="running-section-title">直近の記録</h2>
+              <Link to="/running/records" className="running-see-all">すべて見る →</Link>
+            </div>
             {records.length === 0 ? (
               <p className="running-empty">まだ記録がありません</p>
             ) : (

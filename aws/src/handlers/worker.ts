@@ -13,17 +13,23 @@
 
 import { GetCommand } from '@aws-sdk/lib-dynamodb';
 import { ddb, TABLE_NAME } from '../lib/ddb';
-import { parseRecordId, recordSk, userPk } from '../lib/keys';
-import { createRecord, deleteRecord, listRecords } from '../lib/records';
+import { type AggScope, parseRecordId, recordSk, userPk } from '../lib/keys';
+import { monthKey, todayJst } from '../lib/jst';
+import { getLeaderboard, getMyRank, pickNextThreshold, resolvePeriod } from '../lib/leaderboard';
+import { createRecord, deleteRecord, getSummary, listRecords } from '../lib/records';
+import { getSettings } from '../lib/settings';
 import { validateCreateRecord } from '../lib/validate';
 import { followup } from '../lib/discord-rest';
 import {
   type DiscordInteraction,
   type DiscordInteractionOption,
   LIST_RECENT_LIMIT,
+  RANK_DISPLAY_LIMIT,
   SUB_ADD,
   SUB_DELETE,
   SUB_LIST,
+  SUB_ME,
+  SUB_RANK,
   SUB_WEB,
   OPT_COURSE,
   OPT_DATE,
@@ -31,7 +37,10 @@ import {
   OPT_HR,
   OPT_KCAL,
   OPT_MEMO,
+  OPT_MONTH,
+  OPT_PERIOD,
   OPT_RECORD,
+  OPT_SCOPE,
   OPT_TIME,
   OPT_WEATHER,
   findOption,
@@ -40,7 +49,9 @@ import {
   getInteractionUserId,
   getInteractionUserName,
   getSubcommand,
+  medalForRank,
   parseClockToSeconds,
+  scopeLabel,
   weatherLabel,
 } from '../lib/commands';
 
@@ -205,6 +216,128 @@ async function handleDelete(
   );
 }
 
+// ペース表示用のヘルパー。distanceKm が 0 のとき（記録なし）は割り算できないので null を返す。
+// ペースはサーバー側で保存時に計算する規約（document/running_api.md §3）だが、集計値
+// （PeriodSummary）は距離・時間の合計しか持たないため、表示のためにここで都度計算する。
+function paceLabel(distanceKm: number, durationS: number): string | null {
+  if (distanceKm <= 0) return null;
+  return formatPace(Math.round(durationS / distanceKm));
+}
+
+/** `/run rank`: 指定 scope/period の上位 RANK_DISPLAY_LIMIT 件を Embed で表示する。 */
+async function handleRank(
+  interaction: DiscordInteraction,
+  discordId: string,
+  options: DiscordInteractionOption[],
+): Promise<void> {
+  const scopeValue = optionValue(options, OPT_SCOPE);
+  const scope: AggScope = scopeValue === 'week' || scopeValue === 'total' ? scopeValue : 'month';
+
+  const periodValue = optionValue(options, OPT_PERIOD);
+  const periodParam = typeof periodValue === 'string' ? periodValue : undefined;
+
+  const resolved = resolvePeriod(scope, periodParam);
+  if (!resolved.ok) {
+    await replyText(interaction, resolved.message);
+    return;
+  }
+  const period = resolved.period ?? undefined;
+
+  const [entries, me] = await Promise.all([
+    getLeaderboard(scope, period, RANK_DISPLAY_LIMIT),
+    getMyRank(scope, period, discordId),
+  ]);
+
+  if (entries.length === 0) {
+    await replyText(interaction, 'この期間の記録はまだありません');
+    return;
+  }
+
+  const lines = entries.map((e) => {
+    const medal = medalForRank(e.rank);
+    const label = medal || `${e.rank}.`;
+    return `${label} ${e.userName} — ${e.distanceKm}km ${formatClock(e.durationS)}（${e.runs}回）`;
+  });
+
+  // 自分が上位 RANK_DISPLAY_LIMIT 件に入っていない（＝ランク外）なら、末尾に自分の順位を添える。
+  if (me && !entries.some((e) => e.discordId === discordId)) {
+    lines.push('…');
+    lines.push(`${me.rank}. あなた — ${me.distanceKm}km`);
+  }
+
+  const periodLabel = resolved.period ? `（${resolved.period}）` : '';
+
+  await followup(interaction.application_id, interaction.token, {
+    embeds: [
+      {
+        title: `${scopeLabel(scope)}ランキング${periodLabel}`,
+        color: EMBED_COLOR,
+        description: lines.join('\n'),
+      },
+    ],
+  });
+}
+
+/** `/run me`: 月間・週間・通算の集計と月間順位、次の閾値までの残りを表示する。 */
+async function handleMe(
+  interaction: DiscordInteraction,
+  discordId: string,
+  userName: string,
+  options: DiscordInteractionOption[],
+): Promise<void> {
+  const monthValue = optionValue(options, OPT_MONTH);
+  let month: string | undefined;
+  if (typeof monthValue === 'string') {
+    if (!/^\d{4}-\d{2}$/.test(monthValue)) {
+      await replyText(interaction, 'month は YYYY-MM 形式で指定してください（例: 2026-09）');
+      return;
+    }
+    month = monthValue;
+  }
+
+  const ym = month ?? monthKey(todayJst());
+
+  const [summary, myRank, settings] = await Promise.all([
+    getSummary(discordId, month),
+    getMyRank('month', ym, discordId),
+    getSettings(),
+  ]);
+
+  // distanceKm から distanceM を復元する（distanceM は元々整数メートルなので Math.round で誤差なく戻る）。
+  const monthDistanceM = Math.round(summary.month.distanceKm * 1000);
+  const nextThreshold = pickNextThreshold(monthDistanceM, settings.thresholds);
+
+  const monthPace = paceLabel(summary.month.distanceKm, summary.month.durationS);
+  const weekPace = paceLabel(summary.week.distanceKm, summary.week.durationS);
+  const totalPace = paceLabel(summary.total.distanceKm, summary.total.durationS);
+
+  const fields: { name: string; value: string; inline?: boolean }[] = [
+    {
+      name: `月間（${ym}）`,
+      value: `${summary.month.distanceKm}km ${formatClock(summary.month.durationS)}${monthPace ? `（${monthPace}）` : ''} / ${summary.month.runs}回 / 順位: ${myRank ? `${myRank.rank}位` : '-'}`,
+    },
+    {
+      name: '週間',
+      value: `${summary.week.distanceKm}km ${formatClock(summary.week.durationS)}${weekPace ? `（${weekPace}）` : ''} / ${summary.week.runs}回`,
+    },
+    {
+      name: '通算',
+      value: `${summary.total.distanceKm}km ${formatClock(summary.total.durationS)}${totalPace ? `（${totalPace}）` : ''} / ${summary.total.runs}回`,
+    },
+  ];
+
+  if (nextThreshold) {
+    fields.push({
+      name: '次の目標',
+      value: `${nextThreshold.roleName}まであと${nextThreshold.remainingKm}km`,
+    });
+  }
+
+  await followup(interaction.application_id, interaction.token, {
+    embeds: [{ title: `${userName} さんの記録`, color: EMBED_COLOR, fields }],
+  });
+}
+
 /** `/run web`: Web版へのリンクを返すだけ。 */
 async function handleWeb(interaction: DiscordInteraction): Promise<void> {
   if (!SITE_ORIGIN) {
@@ -244,6 +377,12 @@ async function dispatch(interaction: DiscordInteraction): Promise<void> {
       return;
     case SUB_WEB:
       await handleWeb(interaction);
+      return;
+    case SUB_RANK:
+      await handleRank(interaction, discordId, sub.options);
+      return;
+    case SUB_ME:
+      await handleMe(interaction, discordId, userName, sub.options);
       return;
     default:
       await replyText(interaction, '未対応のコマンドです');

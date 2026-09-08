@@ -2916,3 +2916,88 @@ body {
 .running-record-duration { min-width: 4.5em; }
 .running-record-pace { color: var(--text-muted); }
 .running-record-course { margin-left: auto; color: var(--text-muted); font-size: 0.8rem; }
+
+/* RunningHome: ランキング/一覧への導線 */
+.running-nav-links { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+.running-nav-links .btn { width: auto; }
+
+.running-section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.running-section-header .running-section-title { margin-bottom: 0; }
+.running-see-all { font-size: 0.8rem; color: var(--text-muted); text-decoration: none; }
+.running-see-all:hover { color: var(--text); text-decoration: underline; }
+
+/* 記録一覧・ランキング共通の戻るリンク */
+.running-back { width: auto; margin-top: 16px; }
+.running-inline-btn { width: auto; padding: 7px 14px; font-size: 0.8rem; }
+
+/* ランキングページ: タブ */
+.running-scope-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.running-tab {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--card-border);
+  color: var(--text-muted);
+  border-radius: 20px;
+  padding: 6px 16px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.running-tab:hover { background: rgba(255, 255, 255, 0.1); color: var(--text); }
+.running-tab--active { background: var(--accent); border-color: var(--accent); color: white; }
+
+/* ランキングページ: 対象月の切り替え */
+.running-period-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.running-period-label { font-weight: 700; min-width: 5.5em; text-align: center; }
+
+/* ランキングページ: 自分の順位 */
+.running-me-rank {
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+.running-me-rank strong { font-size: 1.1rem; color: var(--text); }
+
+/* ランキングページ: テーブル */
+.running-table-wrap { overflow-x: auto; }
+.running-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+.running-table th, .running-table td {
+  text-align: left;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--card-border);
+  white-space: nowrap;
+}
+.running-table th { color: var(--text-muted); font-weight: 600; font-size: 0.78rem; }
+
+/* 記録一覧ページ: 行・編集・削除 */
+.running-record-row { display: flex; flex-direction: column; }
+.running-record-actions { display: flex; gap: 6px; margin-left: 8px; }
+
+.running-record-details {
+  margin: 4px 0 2px 10px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.running-record-details summary { cursor: pointer; }
+.running-record-detail-body p { margin: 6px 0 0; }
+
+.running-edit-actions { display: flex; gap: 12px; align-items: center; }
+
+.running-loadmore { width: auto; margin-top: 12px; }
+
+@media (max-width: 600px) {
+  .running-record-item { align-items: flex-start; }
+  .running-record-actions { margin-left: 0; width: 100%; }
+  .running-period-nav { justify-content: space-between; }
+}
