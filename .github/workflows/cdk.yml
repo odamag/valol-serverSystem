@@ -1,0 +1,66 @@
+name: Deploy AWS (CDK)
+
+# aws/ 配下(ランニング記録BotのAWSインフラ)に変更があった時に、CDKスタックを
+# デプロイする。main へのpush(aws/ 配下 or このワークフロー自体の変更時)と
+# 手動実行(workflow_dispatch)をトリガーにしている。
+#
+# 認証方式について: 長期のIAMアクセスキーをGitHub Secretsに置く代わりに、
+# GitHub Actions OIDC + IAMロールのAssumeRoleを使う。
+#   - アクセスキーを漏洩リスクのあるSecretsとして保管し続けなくて済む
+#     (このワークフローでは一時的なSTS認証情報のみを扱う)
+#   - IAM側のロールの信頼ポリシー(trust policy)で、GitHubが発行するOIDCトークンの
+#     `sub`(例: repo:odamag/serverSystem:ref:refs/heads/main)を条件指定できるため、
+#     「mainブランチからのデプロイ実行だけを許可する」といった制限を
+#     AWS側で強制できる(ワークフロー側のミスやSecrets流出に対しても堅牢)
+#
+# ロールARNの設定: このワークフローが assume するIAMロールのARNは、
+# GitHubリポジトリの Settings → Secrets and variables → Actions → Variables
+# (Secretsではなく Variables)に `AWS_DEPLOY_ROLE_ARN` として登録しておくこと。
+# ARN自体は機密情報ではない(信頼ポリシーがない限り誰も引き受けられない)ため
+# Variables で問題ない。
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'aws/**'
+      - '.github/workflows/cdk.yml'
+  workflow_dispatch: {}
+
+# OIDCでAWSの一時認証情報を取得するために id-token: write が必須。
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: CDK Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: aws/package-lock.json
+
+      - name: Install dependencies
+        working-directory: aws
+        run: npm ci
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ap-northeast-1
+
+      # RunningGithubOidc スタック(このワークフロー自身が使うOIDCプロバイダ/IAMロールを
+      # 定義するスタック)はここでのデプロイ対象に含めない。
+      # 含めてしまうと「ロールが存在しないとこのワークフローは動けないのに、
+      # そのロールを作るのがこのワークフロー自身」という鶏と卵の関係になってしまうため、
+      # RunningGithubOidc はローカル環境から手動で(自分のAWS認証情報で)デプロイする運用とする。
+      - name: cdk deploy
+        working-directory: aws
+        run: npx cdk deploy RunningData RunningApp --require-approval never
