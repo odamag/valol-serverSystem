@@ -2832,3 +2832,87 @@ body {
 
 .arena-placement-note p { margin: 0 0 6px; }
 .arena-placement-note p:last-child { margin-bottom: 0; }
+
+/* ── Running ── */
+.running-card { margin-bottom: 20px; }
+
+.running-section-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.running-loading, .running-empty {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  padding: 8px 0;
+}
+
+.running-error {
+  color: #f87171;
+  font-size: 0.875rem;
+  padding: 8px 0;
+}
+
+/* 累計サマリー */
+.running-summary-main {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.running-summary-value { font-size: 1.8rem; font-weight: 700; }
+.running-summary-detail { color: var(--text-muted); font-size: 0.9rem; }
+.running-threshold { margin-top: 8px; font-size: 0.85rem; color: #34d399; }
+.running-summary-sub { margin-top: 10px; color: var(--text-muted); font-size: 0.8rem; }
+
+/* 記録フォーム */
+.running-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px 14px;
+}
+
+.running-textarea { resize: vertical; }
+
+.running-pace-preview {
+  margin: 4px 0 14px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+.running-pace-preview strong { color: var(--text); font-size: 1rem; }
+.running-muted { margin-left: 6px; font-size: 0.75rem; color: var(--text-muted); }
+
+.running-optional {
+  margin-bottom: 14px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+.running-optional summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.running-optional[open] summary { margin-bottom: 10px; }
+
+/* 直近の記録一覧 */
+.running-record-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.running-record-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  flex-wrap: wrap;
+  font-size: 0.875rem;
+}
+.running-record-date { color: var(--text-muted); font-size: 0.8rem; min-width: 5.5em; }
+.running-record-distance { font-weight: 700; min-width: 4em; }
+.running-record-duration { min-width: 4.5em; }
+.running-record-pace { color: var(--text-muted); }
+.running-record-course { margin-left: auto; color: var(--text-muted); font-size: 0.8rem; }
