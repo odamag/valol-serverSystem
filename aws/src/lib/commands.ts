@@ -13,7 +13,7 @@ import type { Weather } from './validate';
 // ── Discord Application Command の型（register-commands.ts が PUT するJSONの形） ──────────
 //
 // ApplicationCommandOptionType（Discord API）:
-//   1 = SUB_COMMAND, 3 = STRING, 4 = INTEGER, 7 = CHANNEL, 8 = ROLE, 10 = NUMBER
+//   1 = SUB_COMMAND, 3 = STRING, 4 = INTEGER, 7 = CHANNEL, 8 = ROLE, 10 = NUMBER, 11 = ATTACHMENT
 
 export interface CommandChoice<T extends string = string> {
   name: string;
@@ -64,6 +64,7 @@ export const OPT_WEATHER = 'weather';
 export const OPT_HR = 'hr';
 export const OPT_KCAL = 'kcal';
 export const OPT_MEMO = 'memo';
+export const OPT_PHOTO = 'photo';
 export const OPT_RECORD = 'record';
 export const OPT_SCOPE = 'scope';
 export const OPT_PERIOD = 'period';
@@ -198,6 +199,11 @@ export const RUN_COMMAND: ApplicationCommand = {
           type: 3,
           name: OPT_MEMO,
           description: 'メモ',
+        },
+        {
+          type: 11, // ATTACHMENT
+          name: OPT_PHOTO,
+          description: '写真（PNG/JPEG/WebP, 8MBまで）',
         },
       ],
     },
@@ -444,6 +450,19 @@ export interface DiscordResolvedChannel {
   name: string;
 }
 
+/**
+ * ATTACHMENT 型オプション（OPT_PHOTO）の値は snowflake の添付ID しか渡ってこないため、
+ * 実体（URL・ファイル名・Content-Type・サイズ）はここから引く。
+ * content_type は Discord 側が判定できなかった場合に省略されることがあるため optional。
+ */
+export interface DiscordResolvedAttachment {
+  id: string;
+  filename: string;
+  content_type?: string;
+  size: number;
+  url: string;
+}
+
 export interface DiscordInteractionOption {
   name: string;
   type: number;
@@ -461,6 +480,7 @@ export interface DiscordInteractionData {
   resolved?: {
     roles?: Record<string, DiscordResolvedRole>;
     channels?: Record<string, DiscordResolvedChannel>;
+    attachments?: Record<string, DiscordResolvedAttachment>;
   };
 }
 

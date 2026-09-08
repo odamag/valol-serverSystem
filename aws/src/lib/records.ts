@@ -11,11 +11,13 @@ import {
   GetCommand,
   QueryCommand,
   TransactWriteCommand,
+  UpdateCommand,
   type TransactWriteCommandInput,
 } from '@aws-sdk/lib-dynamodb';
 import { ddb, TABLE_NAME } from './ddb';
 import { monthKey, todayJst, weekKey } from './jst';
 import { aggSk, type AggScope, lbPk, parseRecordId, recordId as buildRecordId, recordSk, userPk } from './keys';
+import { deletePhoto, getPhotoUrl } from './s3';
 import type { RecordPatchInput, ValidatedRecordInput, Weather } from './validate';
 
 export type Source = 'web' | 'discord';
@@ -82,7 +84,9 @@ function computePace(distanceM: number, durationS: number): number {
   return Math.round(durationS / (distanceM / 1000));
 }
 
-function toApiRecord(item: RecordItem, recordIdHex: string): RunningRecord {
+// getPhotoUrl の署名計算はローカルの暗号演算のみで AWS API を呼ばない（s3.ts のコメント参照）ため、
+// 一覧の各アイテムごとに await しても追加の課金・レイテンシは発生しない。
+async function toApiRecord(item: RecordItem, recordIdHex: string): Promise<RunningRecord> {
   return {
     id: buildRecordId(item.runDate, recordIdHex),
     runDate: item.runDate,
@@ -95,8 +99,7 @@ function toApiRecord(item: RecordItem, recordIdHex: string): RunningRecord {
     weather: item.weather,
     heartRate: item.heartRate,
     calories: item.calories,
-    // Phase 4（S3 写真アップロード）は未実装のため常に null。
-    photoUrl: null,
+    photoUrl: item.photoKey ? await getPhotoUrl(item.photoKey) : null,
     source: item.source,
     updatedAt: item.updatedAt,
   };
@@ -290,7 +293,7 @@ export async function listRecords(
   );
 
   const items = (res.Items ?? []) as RecordItem[];
-  const records = items.map((item) => toApiRecord(item, recordIdHexFromSk(item.sk)));
+  const records = await Promise.all(items.map((item) => toApiRecord(item, recordIdHexFromSk(item.sk))));
   const nextCursor = res.LastEvaluatedKey ? encodeCursor(res.LastEvaluatedKey) : null;
 
   return { records, nextCursor };
@@ -487,7 +490,7 @@ export async function updateRecord(
     throw err;
   }
 
-  return { ok: true, record: toApiRecord(newItem, parsed.recordIdHex) };
+  return { ok: true, record: await toApiRecord(newItem, parsed.recordIdHex) };
 }
 
 export type DeleteRecordResult = { ok: true } | { ok: false; reason: 'not_found' } | { ok: false; reason: 'conflict' };
@@ -562,7 +565,59 @@ export async function deleteRecord(
     throw err;
   }
 
+  // 写真があれば S3 のオブジェクトも消す。DynamoDB 側は既にコミット済みのため、
+  // ここで S3 の削除が失敗しても記録の削除自体を失敗扱いにして巻き戻してはいけない
+  // （中途半端に record は消えたが写真だけ残る、という状態は許容し、ログにだけ残す）。
+  if (item.photoKey) {
+    try {
+      await deletePhoto(item.photoKey);
+    } catch (err) {
+      console.error('[records] failed to delete photo after deleteRecord', err);
+    }
+  }
+
   return { ok: true };
+}
+
+export type SetRecordPhotoResult =
+  | { ok: true; record: RunningRecord; oldPhotoKey: string | null }
+  | { ok: false; reason: 'not_found' };
+
+/**
+ * POST /v1/records/<id>/photo。commitPhoto で確定させた S3 key を記録に紐付ける。
+ * 差し替え時に古い写真を消せるよう、上書き前の photoKey も呼び出し側へ返す
+ * （削除自体は S3 に依存するこの関数の外＝api.ts 側の責務とし、records.ts は
+ * DynamoDB の更新に専念する）。
+ */
+export async function setRecordPhotoKey(
+  discordId: string,
+  id: string,
+  photoKey: string,
+): Promise<SetRecordPhotoResult> {
+  const parsed = parseRecordId(id);
+  if (!parsed) return { ok: false, reason: 'not_found' };
+
+  const pk = userPk(discordId);
+  const sk = recordSk(parsed.runDate, parsed.recordIdHex);
+
+  const got = await ddb.send(new GetCommand({ TableName: TABLE_NAME, Key: { pk, sk }, ConsistentRead: true }));
+  const item = got.Item as RecordItem | undefined;
+  if (!item) return { ok: false, reason: 'not_found' };
+
+  const oldPhotoKey = item.photoKey;
+  const now = Date.now();
+
+  await ddb.send(
+    new UpdateCommand({
+      TableName: TABLE_NAME,
+      Key: { pk, sk },
+      UpdateExpression: 'SET photoKey = :k, updatedAt = :t',
+      ExpressionAttributeValues: { ':k': photoKey, ':t': now },
+    }),
+  );
+
+  const newItem: RecordItem = { ...item, photoKey, updatedAt: now };
+  return { ok: true, record: await toApiRecord(newItem, parsed.recordIdHex), oldPhotoKey };
 }
 
 async function getAggregate(discordId: string, scope: AggScope, period?: string): Promise<PeriodSummary> {

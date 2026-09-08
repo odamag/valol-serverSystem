@@ -16,14 +16,16 @@ import { ddb, TABLE_NAME } from '../lib/ddb';
 import { type AggScope, parseRecordId, recordSk, userPk } from '../lib/keys';
 import { monthKey, todayJst } from '../lib/jst';
 import { getLeaderboard, getMyRank, pickNextThreshold, resolvePeriod } from '../lib/leaderboard';
-import { createRecord, deleteRecord, getSummary, listRecords } from '../lib/records';
+import { createRecord, deleteRecord, getSummary, listRecords, setRecordPhotoKey } from '../lib/records';
 import { getSettings, updateSettings, type Threshold } from '../lib/settings';
 import { hasAdminPermission, recalcAll, syncThresholdRole } from '../lib/roles';
 import { validateCreateRecord } from '../lib/validate';
 import { followup } from '../lib/discord-rest';
+import { isAllowedImageContentType, MAX_PHOTO_BYTES, putDiscordPhoto } from '../lib/s3';
 import {
   type DiscordInteraction,
   type DiscordInteractionOption,
+  type DiscordResolvedAttachment,
   LIST_RECENT_LIMIT,
   RANK_DISPLAY_LIMIT,
   RUN_ADMIN_COMMAND_NAME,
@@ -49,6 +51,7 @@ import {
   OPT_MEMO,
   OPT_MONTH,
   OPT_PERIOD,
+  OPT_PHOTO,
   OPT_RECORD,
   OPT_ROLE,
   OPT_SCOPE,
@@ -77,6 +80,54 @@ function optionValue(options: DiscordInteractionOption[], name: string): string 
 
 async function replyText(interaction: DiscordInteraction, content: string): Promise<void> {
   await followup(interaction.application_id, interaction.token, { content });
+}
+
+type AttachDiscordPhotoResult = { ok: true; photoUrl: string | null } | { ok: false; message: string };
+
+/**
+ * `/run add` に添付された Discord の画像を取り込む。
+ *
+ * interaction.data.resolved.attachments から得られる url は Discord CDN の署名付きURLで、
+ * 一定時間で期限切れになる。これをそのまま DynamoDB に保存してしまうと、期限切れ後に
+ * 画像が表示できなくなってしまうため、WorkerFn がその場でダウンロードした実体を
+ * 自前の S3 バケットへ保存し直す（putDiscordPhoto。tmp/ を経由する必要はない。
+ * ここでサイズ・Content-Type を検証済みの実体を置くだけの一発勝負のため）。
+ *
+ * 失敗しても記録自体は既に作成済みなので、呼び出し側はこの結果を「記録作成の成否」には
+ * 反映させず、警告として利用者に伝えるだけにとどめる（画像のせいで記録が失われないようにする）。
+ */
+async function attachDiscordPhoto(
+  discordId: string,
+  recordId: string,
+  attachment: DiscordResolvedAttachment,
+): Promise<AttachDiscordPhotoResult> {
+  if (attachment.size > MAX_PHOTO_BYTES) {
+    return { ok: false, message: '画像は8MBまでです' };
+  }
+  if (!isAllowedImageContentType(attachment.content_type)) {
+    return { ok: false, message: 'PNG・JPEG・WebP のいずれかの画像形式にしてください' };
+  }
+
+  let buffer: Uint8Array;
+  try {
+    const res = await fetch(attachment.url);
+    if (!res.ok) {
+      return { ok: false, message: '画像のダウンロードに失敗しました' };
+    }
+    buffer = new Uint8Array(await res.arrayBuffer());
+  } catch (err) {
+    console.error('[worker] failed to download discord attachment', err);
+    return { ok: false, message: '画像のダウンロードに失敗しました' };
+  }
+
+  const key = await putDiscordPhoto(discordId, recordId, attachment.content_type, buffer);
+  const updated = await setRecordPhotoKey(discordId, recordId, key);
+  if (!updated.ok) {
+    // 記録がこの間に削除された等、通常はほぼ起こり得ないが念のため。
+    return { ok: false, message: '画像の保存に失敗しました' };
+  }
+
+  return { ok: true, photoUrl: updated.record.photoUrl };
 }
 
 /** `/run add`: 距離・時間などを検証して記録を作成し、結果を Embed で返す。 */
@@ -143,6 +194,23 @@ async function handleAdd(
     console.error('[worker] syncThresholdRole failed after createRecord', err);
   }
 
+  // 写真の取り込みもベストエフォート: 失敗しても記録自体は既に作成済みなので、
+  // 記録を失わせずに Embed 内へ警告として添えるだけにとどめる（画像のせいで記録が失われないようにする）。
+  let photoUrl: string | null = null;
+  let photoWarning: string | null = null;
+  const photoOptionValue = optionValue(options, OPT_PHOTO);
+  if (typeof photoOptionValue === 'string') {
+    const attachment = interaction.data?.resolved?.attachments?.[photoOptionValue];
+    if (attachment) {
+      const photoResult = await attachDiscordPhoto(discordId, record.id, attachment);
+      if (photoResult.ok) {
+        photoUrl = photoResult.photoUrl;
+      } else {
+        photoWarning = photoResult.message;
+      }
+    }
+  }
+
   const fields: { name: string; value: string; inline?: boolean }[] = [
     { name: '距離', value: `${record.distanceKm}km`, inline: true },
     { name: '時間', value: formatClock(record.durationS), inline: true },
@@ -155,9 +223,17 @@ async function handleAdd(
   if (record.heartRate !== null) fields.push({ name: '心拍数', value: `${record.heartRate}bpm`, inline: true });
   if (record.calories !== null) fields.push({ name: '消費カロリー', value: `${record.calories}kcal`, inline: true });
   if (record.memo) fields.push({ name: 'メモ', value: record.memo });
+  if (photoWarning) fields.push({ name: '画像', value: `画像は添付できませんでした（${photoWarning}）` });
 
   await followup(interaction.application_id, interaction.token, {
-    embeds: [{ title: '記録を追加しました', color: EMBED_COLOR, fields }],
+    embeds: [
+      {
+        title: '記録を追加しました',
+        color: EMBED_COLOR,
+        fields,
+        ...(photoUrl ? { image: { url: photoUrl } } : {}),
+      },
+    ],
   });
 }
 

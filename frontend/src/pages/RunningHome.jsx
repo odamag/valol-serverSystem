@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import runningApi, { RunningApiError } from '../lib/runningApi.js'
 import RecordForm from '../components/running/RecordForm.jsx'
+import PhotoUploader from '../components/running/PhotoUploader.jsx'
 import { formatDuration, formatPace } from '../lib/runningFormat.js'
 
 function errMsg(e) {
@@ -15,6 +16,8 @@ export default function RunningHome() {
   const [error, setError] = useState(null)
   // Discord 未連携（403）は専用の案内を出すため、通常のエラーとは分けて持つ
   const [discordRequired, setDiscordRequired] = useState(false)
+  // 記録直後にその記録へ写真を添付できるようにするための導線。null なら非表示
+  const [justCreated, setJustCreated] = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -39,6 +42,12 @@ export default function RunningHome() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  // 記録作成直後は写真添付の導線を出しつつ、一覧・累計を最新化する
+  function handleRecordSubmitted(record) {
+    setJustCreated(record)
+    load()
+  }
 
   return (
     <>
@@ -85,8 +94,28 @@ export default function RunningHome() {
 
           <div className="card running-card">
             <h2 className="running-section-title">記録する</h2>
-            <RecordForm onSubmitted={load} />
+            <RecordForm onSubmitted={handleRecordSubmitted} />
           </div>
+
+          {justCreated && (
+            <div className="card running-card running-photo-prompt">
+              <div className="running-section-header">
+                <h2 className="running-section-title">写真を追加</h2>
+                <button
+                  type="button"
+                  className="running-see-all running-photo-prompt-close"
+                  onClick={() => setJustCreated(null)}
+                >
+                  閉じる
+                </button>
+              </div>
+              <PhotoUploader
+                recordId={justCreated.id}
+                photoUrl={justCreated.photoUrl}
+                onUploaded={(updated) => { setJustCreated(updated); load() }}
+              />
+            </div>
+          )}
 
           <div className="running-nav-links">
             <Link to="/running/ranking" className="btn btn-secondary">🏆 ランキングを見る</Link>

@@ -84,6 +84,18 @@ export class RunningAppStack extends Stack {
           minify: true,
           sourceMap: false,
           target: 'node24',
+          // AWS SDK をランタイム同梱に頼らず、成果物にバンドルする。
+          //
+          // NodejsFunction の既定は @aws-sdk/* を external にする（＝実行時に
+          // ランタイムから require する）挙動だが、マネージドランタイムが同梱する
+          // SDK の範囲は明示された保証がなく、Node.js 22 以降は縮小されている。
+          // 特に @aws-sdk/s3-presigned-post / s3-request-presigner のような
+          // クライアント本体でないパッケージは同梱されない可能性が高い。
+          // external のままだと「デプロイは成功するが、実行時に Cannot find module で
+          // 初めて壊れる」という最悪の壊れ方をするため、確実さを優先してバンドルする。
+          // 代償はバンドルサイズとコールドスタートだが、実測で Discord の3秒制限に
+          // 対する余裕は十分にある。
+          externalModules: [],
         },
         environment: { ...commonEnv, ...extraEnv },
         // 暴走課金対策: Discord からの想定外の連投や不具合による無限リトライで

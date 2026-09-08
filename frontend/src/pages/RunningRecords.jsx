@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import runningApi, { RunningApiError } from '../lib/runningApi.js'
+import PhotoUploader from '../components/running/PhotoUploader.jsx'
 import { WEATHER_OPTIONS, WEATHER_LABELS, parseDurationToSeconds, formatDuration, formatPace } from '../lib/runningFormat.js'
 
 function errMsg(e) {
@@ -180,6 +181,11 @@ export default function RunningRecords() {
   const [editingId, setEditingId] = useState(null)
   // 409（楽観ロック競合）発生時の案内。編集・削除どちらでも同じ扱い
   const [notice, setNotice] = useState('')
+  // photoUrl は有効期限1時間の署名付きURLのため、時間が経つと表示できなくなることがある。
+  // <img onError> で検知した記録IDをここに溜め、「画像を再読み込み」ボタンから一覧を取り直す
+  const [photoErrors, setPhotoErrors] = useState({})
+  // 写真の拡大表示用（クリックしたURLを入れるだけの簡易オーバーレイ）
+  const [enlargedPhoto, setEnlargedPhoto] = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -189,6 +195,7 @@ export default function RunningRecords() {
       const r = await runningApi.get('/v1/records?limit=20')
       setRecords(r.records || [])
       setNextCursor(r.nextCursor || null)
+      setPhotoErrors({})
     } catch (e) {
       if (e instanceof RunningApiError && e.status === 403) setDiscordRequired(true)
       else setError(errMsg(e))
@@ -306,6 +313,33 @@ export default function RunningRecords() {
                           </div>
                         </details>
                       )}
+
+                      <details className="running-record-details">
+                        <summary>写真{r.photoUrl ? '' : '（未設定）'}</summary>
+                        <div className="running-record-detail-body">
+                          {r.photoUrl && !photoErrors[r.id] && (
+                            <img
+                              src={r.photoUrl}
+                              alt="ランニング記録の写真"
+                              className="running-photo-thumb"
+                              onClick={() => setEnlargedPhoto(r.photoUrl)}
+                              // photoUrl は有効期限1時間の署名付きURLなので、時間が経った一覧を
+                              // 開きっぱなしにしていると期限切れで読み込めなくなることがある。
+                              // その場合はエラー扱いにして「画像を再読み込み」の導線を出す
+                              onError={() => setPhotoErrors(prev => ({ ...prev, [r.id]: true }))}
+                            />
+                          )}
+                          {r.photoUrl && photoErrors[r.id] && (
+                            <div className="running-photo-expired">
+                              <p>画像を読み込めませんでした（署名付きURLの期限切れの可能性があります）</p>
+                              <button type="button" className="btn btn-secondary running-inline-btn" onClick={load}>
+                                画像を再読み込み
+                              </button>
+                            </div>
+                          )}
+                          <PhotoUploader recordId={r.id} photoUrl={r.photoUrl} onUploaded={handleSaved} />
+                        </div>
+                      </details>
                     </>
                   )}
                 </li>
@@ -322,6 +356,12 @@ export default function RunningRecords() {
       )}
 
       <Link to="/running" className="btn btn-secondary running-back">← ランニングトップへ</Link>
+
+      {enlargedPhoto && (
+        <div className="running-photo-overlay" onClick={() => setEnlargedPhoto(null)}>
+          <img src={enlargedPhoto} alt="拡大表示" className="running-photo-overlay-img" />
+        </div>
+      )}
     </>
   )
 }

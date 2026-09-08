@@ -2,15 +2,18 @@ import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
 } from 'aws-lambda';
+import { GetCommand } from '@aws-sdk/lib-dynamodb';
 import { jsonResponse } from '../lib/respond';
 import { verifyHmac } from '../lib/verify-hmac';
 import { validateCreateRecord, validateUpdateRecord } from '../lib/validate';
-import { createRecord, deleteRecord, getSummary, listRecords, updateRecord } from '../lib/records';
+import { createRecord, deleteRecord, getSummary, listRecords, setRecordPhotoKey, updateRecord } from '../lib/records';
 import { monthKey, todayJst } from '../lib/jst';
-import { type AggScope, parseRecordId } from '../lib/keys';
+import { ddb, TABLE_NAME } from '../lib/ddb';
+import { type AggScope, parseRecordId, recordSk, userPk } from '../lib/keys';
 import { getLeaderboard, getMyRank, pickNextThreshold, resolvePeriod } from '../lib/leaderboard';
 import { getSettings } from '../lib/settings';
 import { syncThresholdRole } from '../lib/roles';
+import { commitPhoto, createPhotoUploadPost, deletePhoto, isAllowedImageContentType } from '../lib/s3';
 
 // フロントエンド（ブラウザ）が PHP プロキシ（api/running/index.php）経由で叩く Web API（ANY /v1/{proxy+}）。
 //
@@ -21,7 +24,8 @@ import { syncThresholdRole } from '../lib/roles';
 
 const RECORD_ID_PATTERN = '[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9a-f]{32}';
 const RECORD_PATH_RE = new RegExp(`^/v1/records/(${RECORD_ID_PATTERN})$`);
-const PHOTO_PATH_RE = new RegExp(`^/v1/records/(${RECORD_ID_PATTERN})/photo(?:-url)?$`);
+const PHOTO_URL_PATH_RE = new RegExp(`^/v1/records/(${RECORD_ID_PATTERN})/photo-url$`);
+const PHOTO_COMMIT_PATH_RE = new RegExp(`^/v1/records/(${RECORD_ID_PATTERN})/photo$`);
 
 export const handler = async (
   event: APIGatewayProxyEventV2,
@@ -65,9 +69,14 @@ export const handler = async (
       return await handleGetSettings();
     }
 
-    // Phase 4 で実装予定のエンドポイント。まだ何もできないことを明示するスタブ。
-    if (PHOTO_PATH_RE.test(path) && method === 'POST') {
-      return jsonResponse(501, { success: false, message: 'この機能はまだ利用できません' });
+    const photoUrlMatch = PHOTO_URL_PATH_RE.exec(path);
+    if (photoUrlMatch && method === 'POST') {
+      return await handleCreatePhotoUrl(event, discordId, photoUrlMatch[1]);
+    }
+
+    const photoCommitMatch = PHOTO_COMMIT_PATH_RE.exec(path);
+    if (photoCommitMatch && method === 'POST') {
+      return await handleCommitPhoto(event, discordId, photoCommitMatch[1]);
     }
 
     return jsonResponse(404, { success: false, message: 'Not Found' });
@@ -293,4 +302,96 @@ async function handleGetSettings(): Promise<APIGatewayProxyStructuredResultV2> {
   // roleId は Discord 内部IDなので Web には露出させない（document/running_api.md §4）。
   const thresholds = settings.thresholds.map((t) => ({ km: t.km, roleName: t.roleName }));
   return jsonResponse(200, { success: true, thresholds });
+}
+
+/**
+ * POST /v1/records/<id>/photo-url。document/running_api.md §5 のステップ1。
+ * 記録の存在を確認してから署名を発行する（存在しない/他人の記録IDに対して
+ * 署名付きアップロード枠を発行してしまうと、無意味なアップロード先を量産されてしまうため）。
+ */
+async function handleCreatePhotoUrl(
+  event: APIGatewayProxyEventV2,
+  discordId: string,
+  id: string,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const body = parseJsonBody(event);
+  if (body === undefined || typeof body !== 'object' || body === null) {
+    return jsonResponse(400, { success: false, message: 'リクエストボディの形式が正しくありません' });
+  }
+
+  const contentType = (body as Record<string, unknown>).contentType;
+  if (!isAllowedImageContentType(contentType)) {
+    return jsonResponse(400, { success: false, message: '画像は PNG・JPEG・WebP のいずれかで指定してください' });
+  }
+
+  const parsed = parseRecordId(id);
+  if (!parsed) {
+    return jsonResponse(404, { success: false, message: '記録が見つかりません' });
+  }
+
+  const got = await ddb.send(
+    new GetCommand({
+      TableName: TABLE_NAME,
+      Key: { pk: userPk(discordId), sk: recordSk(parsed.runDate, parsed.recordIdHex) },
+    }),
+  );
+  if (!got.Item) {
+    return jsonResponse(404, { success: false, message: '記録が見つかりません' });
+  }
+
+  const upload = await createPhotoUploadPost(discordId, id, contentType);
+  return jsonResponse(200, {
+    success: true,
+    upload: { url: upload.url, fields: upload.fields },
+    key: upload.key,
+  });
+}
+
+/**
+ * POST /v1/records/<id>/photo。document/running_api.md §5 のステップ3。
+ * commitPhoto で tmp/ の一時オブジェクトを検証・確定し、記録に photoKey を保存する。
+ * 既に写真が設定済み（差し替え）だった場合は、放置すると課金対象のゴミになる古いオブジェクトを削除する。
+ */
+async function handleCommitPhoto(
+  event: APIGatewayProxyEventV2,
+  discordId: string,
+  id: string,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const body = parseJsonBody(event);
+  if (body === undefined || typeof body !== 'object' || body === null) {
+    return jsonResponse(400, { success: false, message: 'リクエストボディの形式が正しくありません' });
+  }
+
+  const key = (body as Record<string, unknown>).key;
+  if (typeof key !== 'string') {
+    return jsonResponse(400, { success: false, message: 'key を指定してください' });
+  }
+
+  const committed = await commitPhoto(discordId, id, key);
+  if (!committed.ok) {
+    return jsonResponse(400, { success: false, message: committed.message });
+  }
+
+  const result = await setRecordPhotoKey(discordId, id, committed.key);
+  if (!result.ok) {
+    // 確定は成功したのに記録が見つからない（削除と競合した等）場合、S3 にゴミを残さないよう掃除する。
+    try {
+      await deletePhoto(committed.key);
+    } catch (err) {
+      console.error('[api] failed to clean up orphaned photo', err);
+    }
+    return jsonResponse(404, { success: false, message: '記録が見つかりません' });
+  }
+
+  if (result.oldPhotoKey) {
+    // 差し替え時の古い写真の削除はベストエフォート: 失敗しても記録の更新自体（DynamoDB）は
+    // 既にコミット済みのため巻き戻さず、ログにだけ残す。
+    try {
+      await deletePhoto(result.oldPhotoKey);
+    } catch (err) {
+      console.error('[api] failed to delete old photo after replace', err);
+    }
+  }
+
+  return jsonResponse(200, { success: true, record: result.record });
 }
