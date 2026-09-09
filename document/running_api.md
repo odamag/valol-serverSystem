@@ -180,3 +180,25 @@ Discord のスラッシュコマンドは PHP を経由せず WorkerFn が直接
 **バリデーションと丸めの規約は上記と完全に同じ関数を共有する**こと
 （`src/lib/records.ts` に集約し、`api.ts` と `worker.ts` の両方から呼ぶ）。
 違いは `source` が `"discord"` になることと、`userName` に Discord の表示名が入ることだけ。
+
+### 応答の公開範囲（ephemeral）
+
+Discord の応答は「本人にのみ見える（ephemeral）」か「チャンネルに公開」かのどちらかで、
+**この判定は interactions.ts が defer 応答（type=5）を返した時点で確定し、後から
+worker.ts の followup で変更することはできない**（Discord の仕様）。そのため
+`shouldBeEphemeral`（`src/lib/commands.ts`）が、まだバリデーション前のコマンド名と
+オプションだけを見て判断する。
+
+| コマンド | 公開範囲 |
+| --- | --- |
+| `/run add` | 既定は公開。`private:true` を指定すると本人のみ |
+| `/run rank` | 既定は公開。`private:true` を指定すると本人のみ |
+| `/run list` | 常に本人のみ |
+| `/run me` | 常に本人のみ |
+| `/run delete` | 常に本人のみ |
+| `/run web` | 常に本人のみ |
+| `/run-admin`（全サブコマンド） | 常に本人のみ |
+
+`/run add` `/run rank` を公開既定にした結果、バリデーションエラーもチャンネルに公開される
+（例:「時間の形式が正しくありません」）。エラーメッセージは短く自己説明的なため、これは
+許容する方針とする。

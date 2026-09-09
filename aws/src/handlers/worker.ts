@@ -225,10 +225,16 @@ async function handleAdd(
   if (record.memo) fields.push({ name: 'メモ', value: record.memo });
   if (photoWarning) fields.push({ name: '画像', value: `画像は添付できませんでした（${photoWarning}）` });
 
+  // 公開設定（private:false, 既定）だと他のメンバーにも流れるチャンネル投稿になるため、
+  // Embed 単体を見ただけで誰の記録か分かるよう author に表示名を入れる。
+  // Discord はインタラクション応答の上に「@user が /run add を使用しました」とも表示するが、
+  // それだけに頼らず Embed 側でも自己完結させる。
+  // 非公開時（private:true）でも分岐は増やさず同じ表示にする（本人にしか見えないので実害はない）。
   await followup(interaction.application_id, interaction.token, {
     embeds: [
       {
         title: '記録を追加しました',
+        author: { name: userName },
         color: EMBED_COLOR,
         fields,
         ...(photoUrl ? { image: { url: photoUrl } } : {}),

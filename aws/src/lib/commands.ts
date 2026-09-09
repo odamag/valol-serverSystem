@@ -69,6 +69,7 @@ export const OPT_RECORD = 'record';
 export const OPT_SCOPE = 'scope';
 export const OPT_PERIOD = 'period';
 export const OPT_MONTH = 'month';
+export const OPT_PRIVATE = 'private';
 
 // ── /run-admin（Phase 3: ロール自動付与の管理コマンド） ──────────────────────────
 
@@ -205,6 +206,11 @@ export const RUN_COMMAND: ApplicationCommand = {
           name: OPT_PHOTO,
           description: '写真（PNG/JPEG/WebP, 8MBまで）',
         },
+        {
+          type: 5, // BOOLEAN
+          name: OPT_PRIVATE,
+          description: '自分にだけ表示する（既定: チャンネルに公開）',
+        },
       ],
     },
     {
@@ -249,6 +255,11 @@ export const RUN_COMMAND: ApplicationCommand = {
           type: 3,
           name: OPT_PERIOD,
           description: '対象期間 例: 2026-09（省略時は今期）',
+        },
+        {
+          type: 5, // BOOLEAN
+          name: OPT_PRIVATE,
+          description: '自分にだけ表示する（既定: チャンネルに公開）',
         },
       ],
     },
@@ -536,4 +547,35 @@ export function getInteractionUserName(interaction: DiscordInteraction): string 
     return interaction.user.global_name ?? interaction.user.username;
   }
   return null;
+}
+
+/**
+ * この interaction への応答を ephemeral（本人にのみ見える）にすべきかどうかを判定する。
+ *
+ * 重要な制約: ephemeral かどうかは interactions.ts が defer 応答（type=5）を返した時点で
+ * 確定し、後から worker.ts の followup で変更することはできない（Discord の仕様）。
+ * そのため、まだ DynamoDB を読んでいない・バリデーションもしていないこの時点、
+ * つまり interactions.ts 側で「コマンド名とオプションだけ」を見て判断する必要がある。
+ *
+ * この判断の結果、`/run add` `/run rank` は private:true 以外では常に公開される。
+ * つまりバリデーションエラー（例:「時間の形式が正しくありません」）も公開チャンネルに
+ * 流れることになるが、エラーメッセージは短く自己説明的で、他人の個人情報を含まないため
+ * 許容する方針とする（詳細は document/running_api.md §6）。
+ *
+ * `/run add` `/run rank` 以外の全コマンド（`/run list` `/run me` `/run delete` `/run web`、
+ * `/run-admin` の全サブコマンド）は元から「本人のみで固定」であり、private オプション自体を
+ * 持たない。また、未知のコマンド名や想定外の構造（data や options が欠けている等）が来た場合も
+ * 必ず ephemeral（true）にフォールバックする。「公開すべきかどうか判断できないときは
+ * 公開しない」方が安全側であり、誤って他人の記録やエラー内容をチャンネルに晒す事故を防げる。
+ */
+export function shouldBeEphemeral(interaction: DiscordInteraction): boolean {
+  const sub = getSubcommand(interaction.data);
+  if (!sub) return true; // data/options が無い、またはサブコマンド構造でない → 安全側で本人のみ
+
+  if (interaction.data?.name !== RUN_COMMAND_NAME) return true; // /run-admin 等は常に本人のみ
+
+  if (sub.name !== SUB_ADD && sub.name !== SUB_RANK) return true; // list/delete/web/me は常に本人のみ
+
+  const privateOption = findOption(sub.options, OPT_PRIVATE);
+  return privateOption?.value === true; // 省略時・false は公開、true のときだけ本人のみ
 }

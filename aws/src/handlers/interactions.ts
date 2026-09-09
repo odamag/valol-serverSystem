@@ -11,6 +11,7 @@ import {
   formatRecordChoiceName,
   getInteractionUserId,
   getSubcommand,
+  shouldBeEphemeral,
   type DiscordInteraction,
 } from '../lib/commands';
 
@@ -114,9 +115,15 @@ async function dispatchToWorker(
     console.error('[interactions] failed to invoke WorkerFn', err);
   }
 
-  // レスポンス type=5 (DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE) + flags=64 (EPHEMERAL)。
-  // ランニング記録は他人のチャンネルを埋めないほうがよいため、全応答を本人にのみ見える形にする。
-  return jsonResponse(200, { type: 5, data: { flags: 64 } });
+  // レスポンス type=5 (DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE)。
+  // ephemeral かどうかは、この defer 応答を返した時点で確定し、後から worker.ts の
+  // followup で変更することはできない（Discord の仕様）。そのため、まだバリデーションも
+  // していないこの時点で、コマンド名とオプションだけを見て shouldBeEphemeral が判断する
+  // （判断ロジック・ここでバリデーションエラーも公開されうる点の許容理由は commands.ts 参照）。
+  return jsonResponse(200, {
+    type: 5,
+    data: shouldBeEphemeral(interaction) ? { flags: 64 } : {},
+  });
 }
 
 export const handler = async (
