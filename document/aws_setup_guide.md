@@ -330,7 +330,7 @@ npx cdk deploy RunningData RunningApp --profile running
 デプロイ実行後、ターミナルの出力（CDK の Outputs）に `HttpApiUrl` が表示される。
 ```
 Outputs:
-RunningApp.HttpApiUrl = https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com/
+RunningApp.HttpApiUrl = https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com
 ```
 この値を控える（チェックリスト #8）。出力を見逃した／閉じてしまった場合は、
 コンソールの API Gateway → 対象の HTTP API →「ステージ」から呼び出し URL を確認できる。
@@ -339,11 +339,23 @@ RunningApp.HttpApiUrl = https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.
 
 1. https://discord.com/developers/applications で対象アプリケーションを開く。
 2. 「General Information」タブの「INTERACTIONS ENDPOINT URL」欄に、
-   `<HttpApiUrl>discord/interactions` を貼り付ける。
-   > `HttpApiUrl` の末尾に既にスラッシュが付いているので、二重スラッシュにならないよう
-   > 貼り付け後に URL 全体を目視確認すること
-   > （例: `https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com/discord/interactions`）。
+   `<HttpApiUrl>/discord/interactions` を貼り付ける。
+   > **`HttpApiUrl` の末尾にスラッシュは付いていない**ので、自分で `/` を足すこと。
+   > 足し忘れると `...amazonaws.comdiscord/interactions` という壊れた URL になり、
+   > ホスト名が解決できずに Discord 側の保存が失敗する。
+   > （正: `https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com/discord/interactions`）
 3. 「Save Changes」をクリックする。
+
+> **登録前に自分で確かめることもできる。** 不正な署名を付けて叩き、`401` が返れば
+> エンドポイントは正しく動いている（Discord が登録時に行う検証と同じこと）。
+>
+> ```bash
+> curl -s -o /dev/null -w "%{http_code}
+" -X POST "<HttpApiUrl>/discord/interactions" >   -H 'Content-Type: application/json' >   -H 'x-signature-ed25519: 00' -H 'x-signature-timestamp: 1' -d '{"type":1}'
+> ```
+>
+> `401` なら OK。`000` ならホスト名が解決できていない（URL の組み立てミス）。
+> `500` なら Lambda 側の例外なので CloudWatch Logs を見る。
 
 ### D-3. 保存が通ったことの意味
 
@@ -361,8 +373,8 @@ RunningApp.HttpApiUrl = https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.
 2. **`DISCORD_PUBLIC_KEY` が正しいか確認**: Lambda コンソール → 対象関数 →
    「設定」タブ →「環境変数」を開き、B-2 で控えた Public Key と一致しているか目視で比較する。
    ずれている場合は `aws/cdk.json` の `discordPublicKey` を修正して再デプロイする。
-3. **URL の末尾を再確認**: `<HttpApiUrl>` の末尾スラッシュと `discord/interactions` の
-   先頭が重複して `//discord/interactions` のようになっていないか確認する。
+3. **URL を再確認**: `<HttpApiUrl>` と `discord/interactions` の間にスラッシュが
+   ちょうど1つあるか（`HttpApiUrl` 自体には末尾スラッシュが付かない）。
 
 ---
 
