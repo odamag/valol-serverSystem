@@ -505,14 +505,25 @@ npx cdk deploy RunningGithubOidc --profile running
 直接アクセスがブロックされていることの確認になる。200 が返る、あるいは PHP のコードが
 そのまま表示される場合は設定漏れなので、`.htaccess` の適用範囲を見直す。
 
-### F-4. Discord ログイン連携の前提
+### F-4. サイトログインが必要なのは Web 側だけ
 
-ランニング機能は Discord ID をユーザーの鍵として使っている。サイトにまだ一度も
-Discord でログインしたことがないアカウントで動作確認する場合は、先に
-「Discordでログイン」を1回通して `discord_users` テーブルに紐付けを作っておく必要がある
-（このテーブルは既存の `api/auth/discord_callback.php` が作成・維持している）。
-未連携のまま `X-Arena-Discord-Id` 相当のヘッダーを送っても 401 になる想定なので、
-先にログインを済ませてから機能確認を行うこと。
+ランニング機能は **Discord ID をユーザーの鍵**として使っている（DynamoDB のキーが
+`U#<discordId>`）。そのため、必要な準備が Discord 側と Web 側で違う。
+
+| | サイトログイン | 理由 |
+|---|---|---|
+| **Discord ボット** | **不要** | interaction に Discord ユーザー ID が含まれるので、それをそのまま鍵に使える。サイトの `auth.db` は一切参照しない |
+| **Web 画面** | **必要**（Discord でのログイン） | セッションからは `user_id` しか分からないため、`discord_users` テーブルで Discord ID に対応付ける必要がある |
+
+**サーバーのメンバーはサイトのアカウントを作らずに `/run add` を使える。** Web も使いたい人
+だけが、サイトで「Discordでログイン」を1回通せばよい。連携さえすれば、Discord で貯めた
+記録がそのまま Web に出る（鍵が同じ Discord ID のため）。逆も同じ。
+
+`discord_users` テーブルは既存の `api/auth/discord_callback.php` が作成・維持している。
+未連携のアカウントで `/running` を開くと **403** と
+「ランニング機能を使うには Discord でログインしてください」が返るので、その場合は
+一度ログアウトして「Discordでログイン」から入り直すこと
+（ID+TOTP でログインしただけでは `discord_users` の紐付けは作られない）。
 
 ---
 
