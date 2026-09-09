@@ -52,6 +52,18 @@ export class RunningAppStack extends Stack {
       SSM_PREFIX: '/running/',
     };
 
+    // 予約同時実行数（任意）。未設定なら undefined＝予約しない。
+    // 設定する場合は「アカウント上限 - 未予約の最低確保数(10 または 100)」を4関数で分け合える
+    // 範囲に収めること。超えるとデプロイが InvalidRequest で失敗する。
+    const rawReserved = this.node.tryGetContext('lambdaReservedConcurrency');
+    const reservedConcurrency =
+      rawReserved === undefined || rawReserved === null || rawReserved === ''
+        ? undefined
+        : Number(rawReserved);
+    if (reservedConcurrency !== undefined && !Number.isInteger(reservedConcurrency)) {
+      throw new Error('context の lambdaReservedConcurrency は整数で指定してください');
+    }
+
     // 4関数共通の設定をまとめるファクトリ。timeout とエントリポイントだけが関数ごとに異なる。
     const createFunction = (
       idName: string,
@@ -98,9 +110,20 @@ export class RunningAppStack extends Stack {
           externalModules: [],
         },
         environment: { ...commonEnv, ...extraEnv },
-        // 暴走課金対策: Discord からの想定外の連投や不具合による無限リトライで
-        // 一気に大量の同時実行が走らないよう、全関数に予約同時実行数の上限をかけておく。
-        reservedConcurrentExecutions: 10,
+        // 予約同時実行数は既定では設定しない（cdk.json の lambdaReservedConcurrency で任意に有効化）。
+        //
+        // 暴走課金対策として当初は全関数に 10 を固定で設定していたが、これは新規AWSアカウントでは
+        // 必ずデプロイに失敗する。AWS はアカウント全体の同時実行数から「未予約分を最低10（大きな
+        // アカウントでは100）残すこと」を要求するため、アカウント上限そのものが 10 の新規アカウントでは
+        // 予約同時実行数を1つも設定できない。
+        //   → ReservedConcurrentExecutions ... decreases account's UnreservedConcurrentExecution
+        //      below its minimum value of [10]
+        //
+        // そもそもアカウント上限が低いうちは、その上限自体が予約より強い歯止めになっている。
+        // 加えて API Gateway 側のスロットリング(20rps/burst40)が入口を絞っており、暴走課金への
+        // 備えとしてはそちらが主役。アカウント上限が引き上げられた後に絞りたくなったら、
+        // cdk.json の context に lambdaReservedConcurrency を足せばよい。
+        reservedConcurrentExecutions: reservedConcurrency,
         ...extraProps,
       });
     };

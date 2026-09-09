@@ -592,6 +592,41 @@ Discord でログインしたことがないアカウントで動作確認する
 **まず G-2 のロール階層を疑うこと。** 権限（Permissions）の設定ミスではなく、
 Bot のロールが管理対象ロールより下に配置されていることが原因であるケースが大半。
 
+### デプロイが `ReservedConcurrentExecutions ... below its minimum value of [10]` で失敗する
+
+新規 AWS アカウントは Lambda の同時実行上限が **10**（従来の 1000 ではない）で、利用実績に
+応じて自動的に引き上げられる。AWS は未予約分を最低10残すことを要求するため、上限が 10 の
+アカウントでは**予約同時実行数を1つも設定できない**。
+
+現在のコードは予約同時実行数を既定で設定しないので、このエラーは出ないはずである。
+もし `cdk.json` の context に `lambdaReservedConcurrency` を足していたら、それを外すか
+値を小さくすること。
+
+現在の上限は次のコマンドで確認できる。
+
+```powershell
+aws lambda get-account-settings --profile running --region ap-northeast-1 --query AccountLimit
+```
+
+> 上限が低いうちは、その上限自体が暴走課金への歯止めになっている。加えて API Gateway 側の
+> スロットリング（20rps / burst 40）が入口を絞っているため、予約同時実行数を設定しなくても
+> 課金が暴走する経路は塞がれている。
+
+### スタックが `ROLLBACK_COMPLETE` で止まっている
+
+CREATE に失敗したスタックは `ROLLBACK_COMPLETE` になり、**その状態のままでは更新できない**。
+原因を直したうえで `cdk deploy` を再実行すれば、CDK が失敗したスタックを削除してから
+作り直す。手動で消したい場合は次のコマンド。
+
+```powershell
+cd aws
+npx cdk destroy RunningApp --profile running
+```
+
+> `RunningData`（DynamoDB / S3）は `RemovalPolicy.RETAIN` なので、`cdk destroy` しても
+> テーブルとバケットは残る（記録を失わないための意図的な設定）。`RunningApp` は
+> Lambda と API Gateway だけなので、消して作り直して構わない。
+
 ### 一度作った環境を消したいとき
 
 ```bash
