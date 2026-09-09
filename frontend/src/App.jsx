@@ -1,5 +1,6 @@
 import { useState, useEffect, createContext, useContext } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { isSafeInternalPath } from './lib/urlSafety.js'
 import Layout from './components/Layout.jsx'
 import SiteGate from './components/SiteGate.jsx'
 import Login from './pages/Login.jsx'
@@ -28,6 +29,31 @@ export function useAuth() {
   return useContext(AuthContext)
 }
 
+// 未ログインならログイン画面へ送り、ログイン後に元のページへ戻れるよう行き先を控えておく
+function RequireLogin({ to, children }) {
+  const { auth } = useAuth()
+  if (auth.loggedIn) return children
+  // sessionStorage への書き込みは冪等な副作用なので描画中に行って差し支えない。
+  // Discord OAuth はページ遷移を伴い React の state が消えるため、state ではなく
+  // sessionStorage に置く必要がある。
+  sessionStorage.setItem('postLoginRedirect', to)
+  return <Navigate to={`/login?next=${encodeURIComponent(to)}`} replace />
+}
+
+// Discord OAuth はページリロードを挟むため、ログイン完了後にここで行き先を回収する
+function PostLoginRedirect() {
+  const { auth } = useAuth()
+  const navigate = useNavigate()
+  useEffect(() => {
+    if (!auth.loggedIn) return
+    const dest = sessionStorage.getItem('postLoginRedirect')
+    if (!dest) return
+    sessionStorage.removeItem('postLoginRedirect')
+    if (isSafeInternalPath(dest)) navigate(dest, { replace: true })
+  }, [auth.loggedIn, navigate])
+  return null
+}
+
 function App() {
   const [auth, setAuth] = useState({ loading: true, loggedIn: false, username: null, userId: null })
 
@@ -51,6 +77,7 @@ function App() {
     <SiteGate>
       <AuthContext.Provider value={{ auth, setAuth }}>
         <BrowserRouter>
+          <PostLoginRedirect />
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
@@ -93,15 +120,15 @@ function App() {
               />
               <Route
                 path="running"
-                element={auth.loggedIn ? <RunningHome /> : <Navigate to="/login" replace />}
+                element={<RequireLogin to="/running"><RunningHome /></RequireLogin>}
               />
               <Route
                 path="running/ranking"
-                element={auth.loggedIn ? <RunningRanking /> : <Navigate to="/login" replace />}
+                element={<RequireLogin to="/running/ranking"><RunningRanking /></RequireLogin>}
               />
               <Route
                 path="running/records"
-                element={auth.loggedIn ? <RunningRecords /> : <Navigate to="/login" replace />}
+                element={<RequireLogin to="/running/records"><RunningRecords /></RequireLogin>}
               />
             </Route>
             <Route path="*" element={<Navigate to="/server" replace />} />

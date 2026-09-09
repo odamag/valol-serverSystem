@@ -10,6 +10,7 @@ import {
   parseClockToSeconds,
   weatherLabel,
 } from '../src/lib/commands';
+import { buildWebUrl } from '../src/handlers/worker';
 
 let failures = 0;
 
@@ -114,6 +115,23 @@ test('choiceName: 100文字を超える場合は切り詰められる（Discord�
     course: 'a'.repeat(100),
   });
   assert.ok(name.length <= 100, `expected length <= 100, got ${name.length}`);
+});
+
+// ── buildWebUrl ─────────────────────────────────────────────────────
+test('buildWebUrl: 末尾スラッシュ無しのoriginに/runningを付ける', () => {
+  assert.equal(buildWebUrl('https://valol.jellybean.jp'), 'https://valol.jellybean.jp/running');
+});
+
+test('buildWebUrl: 末尾スラッシュ有りのoriginでも二重スラッシュにならない', () => {
+  assert.equal(buildWebUrl('https://valol.jellybean.jp/'), 'https://valol.jellybean.jp/running');
+});
+
+test('buildWebUrl: 空文字はnull（呼び出し側で未設定エラーを返すため）', () => {
+  assert.equal(buildWebUrl(''), null);
+});
+
+test('buildWebUrl: パス無しの短いoriginでも動く', () => {
+  assert.equal(buildWebUrl('https://x.jp'), 'https://x.jp/running');
 });
 
 if (failures > 0) {

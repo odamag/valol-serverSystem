@@ -441,13 +441,28 @@ async function handleMe(
   });
 }
 
-/** `/run web`: Web版へのリンクを返すだけ。 */
+/**
+ * SITE_ORIGIN から `/run web` が案内する URL を組み立てる純粋関数。
+ * トップページ（`/`）ではなくランニング機能のページ（`/running`）に直接飛ばしたいので、
+ * ここでパスを付け足す。origin が末尾スラッシュ付き/無しのどちらで設定されていても
+ * `//running` のような二重スラッシュにならないよう吸収する。
+ * origin が空文字（未設定）なら null を返し、呼び出し側は従来どおり案内エラーを返す。
+ */
+export function buildWebUrl(origin: string): string | null {
+  if (!origin) return null;
+  // 末尾スラッシュは何個あっても取り除く（cdk.json に手で書く値なので揺れうる）
+  const trimmed = origin.replace(/\/+$/, '');
+  return `${trimmed}/running`;
+}
+
+/** `/run web`: Web版（ランニングページ）へのリンクを返すだけ。 */
 async function handleWeb(interaction: DiscordInteraction): Promise<void> {
-  if (!SITE_ORIGIN) {
+  const url = buildWebUrl(SITE_ORIGIN);
+  if (!url) {
     await replyText(interaction, 'Web版のURLが未設定です。管理者に問い合わせてください。');
     return;
   }
-  await replyText(interaction, `Web版のランニング記録はこちらから開けます:\n${SITE_ORIGIN}`);
+  await replyText(interaction, `Web版のランニング記録はこちらから開けます:\n${url}`);
 }
 
 // ── /run-admin（Phase 3: ロール自動付与の管理コマンド） ──────────────────────
