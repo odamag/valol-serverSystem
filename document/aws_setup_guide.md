@@ -292,11 +292,38 @@ aws ssm get-parameters --profile running --region ap-northeast-1 \
 
 ---
 
-## D. Interactions Endpoint URL の設定（Phase 0・CDK デプロイ後・所要目安 10〜15分）
+## D. 初回デプロイと Interactions Endpoint URL の設定（Phase 0・所要目安 20〜30分）
 
-> この章は `RunningData` / `RunningApp` スタックが AWS 側にデプロイ済みであることが前提。
-> デプロイ自体はコード側の作業（GitHub Actions または E-1 のようなローカル `cdk deploy`）で
-> 行われる想定。ここでは**デプロイ済みの状態から先**の手動操作を扱う。
+> **初回のデプロイは必ずローカルから行う。** GitHub Actions（`Deploy AWS (CDK)`）は
+> まだ使えない。Actions が使う IAM ロールを作るのが E-1 で、この章より後だからである。
+
+### D-0. `cdk.json` を埋めてからデプロイする
+
+**デプロイ前に `aws/cdk.json` の `context` を B で控えた値に置き換えること。**
+
+```jsonc
+"siteOrigin": "http://localhost:5173",          // H で本番ドメインに変える（今はこのままでよい）
+"discordAppId": "<チェックリスト #3>",
+"discordPublicKey": "<チェックリスト #4>",
+"discordGuildId": "<チェックリスト #6>",
+```
+
+> **`discordPublicKey` はデプロイ時に Lambda の環境変数へ焼き込まれる**（`aws/lib/running-app-stack.ts`）。
+> `PLACEHOLDER_...` のままデプロイすると Discord の署名検証が必ず失敗し、**D-2 の
+> Interactions Endpoint URL 登録が通らない**。しかもエラーは Discord 側の
+> 「エンドポイントが検証に応答しませんでした」という曖昧な表示になるため、原因に気づきにくい。
+> 値を直したら `cdk deploy` をやり直せば直る。
+
+置き換えたらデプロイする。`RunningData` と `RunningApp` はスタック間参照があるので、
+両方を指定すれば CDK が依存順に流してくれる。
+
+```bash
+cd aws
+npm ci
+npx cdk deploy RunningData RunningApp --profile running
+```
+
+初回は 3〜5 分程度かかる。`RunningGithubOidc` はここでは**まだデプロイしない**（E-1 で行う）。
 
 ### D-1. `HttpApiUrl` を控える
 
@@ -350,10 +377,10 @@ RunningApp.HttpApiUrl = https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.
 > 自分のマシンから1回だけ手動デプロイする。
 
 デプロイの前に、`aws/cdk.json` の `context.githubRepo` が自分のリポジトリと
-一致しているか確認する（既定値は `odamag/serverSystem`）。
+一致しているか確認する（既定値は `odamag/valol-serverSystem`）。
 
 ```jsonc
-"githubRepo": "odamag/serverSystem"
+"githubRepo": "odamag/valol-serverSystem"
 ```
 
 > この値は IAM ロールの信頼ポリシーに `repo:<owner>/<repo>:ref:refs/heads/main` として

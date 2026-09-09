@@ -79,6 +79,6 @@
     "discordAppId": "PLACEHOLDER_DISCORD_APP_ID",
     "discordPublicKey": "PLACEHOLDER_DISCORD_PUBLIC_KEY",
     "discordGuildId": "PLACEHOLDER_DISCORD_GUILD_ID",
-    "githubRepo": "odamag/serverSystem"
+    "githubRepo": "odamag/valol-serverSystem"
   }
 }
