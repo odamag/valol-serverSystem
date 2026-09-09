@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../App.jsx'
+import { isSafeInternalPath } from '../lib/urlSafety.js'
 
 const DISCORD_ERRORS = {
   invalid_state:        'セキュリティエラーが発生しました。もう一度お試しください。',
@@ -24,6 +25,12 @@ export default function Login() {
     discordErr ? (DISCORD_ERRORS[discordErr] ?? 'Discordログインに失敗しました。') : ''
   )
 
+  // next はログイン後に戻るべき元のページ（RequireLogin が付与する）。
+  // ランニング機能は discord_users の紐付けが無いと ID+TOTP ログインでも 403 になるため、
+  // エラーとは別枠で「Discord連携が必要」という案内をここで出す（改修4）。
+  const nextParam = searchParams.get('next')
+  const showRunningNotice = typeof nextParam === 'string' && nextParam.startsWith('/running')
+
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
@@ -38,7 +45,11 @@ export default function Login() {
       const data = await res.json()
       if (data.success) {
         setAuth({ loading: false, loggedIn: true, username: data.username, userId: data.userId })
-        navigate('/server')
+        // RequireLogin が sessionStorage に控えた行き先があればそちらへ戻す。
+        // 次回以降に持ち越さないよう、読み取ったら必ず削除する。
+        const dest = sessionStorage.getItem('postLoginRedirect')
+        sessionStorage.removeItem('postLoginRedirect')
+        navigate(isSafeInternalPath(dest) ? dest : '/server')
       } else {
         setError(data.message ?? 'ログインに失敗しました')
       }
@@ -55,6 +66,12 @@ export default function Login() {
         <div className="auth-logo">🔐</div>
         <h1 className="auth-title">ログイン</h1>
         <p className="auth-subtitle">IDとOTPを入力してください</p>
+
+        {showRunningNotice && (
+          <div className="alert alert-info">
+            ランニング機能を使うには Discord 連携が必要です。下の「Discordでログイン」からお入りください。
+          </div>
+        )}
 
         {error && <div className="alert alert-error">{error}</div>}
 

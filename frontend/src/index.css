@@ -316,6 +316,8 @@ body {
 }
 .alert-error { background: rgba(239, 68, 68, 0.1); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.25); }
 .alert-success { background: rgba(16, 185, 129, 0.1); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.25); }
+/* エラーではなく案内（例: ランニング機能にはDiscord連携が必要）を表示するための情報用バリアント */
+.alert-info { background: rgba(59, 130, 246, 0.1); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.25); }
 
 .auth-link {
   text-align: center;
