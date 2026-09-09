@@ -8,7 +8,9 @@ import {
   formatPace,
   formatRecordChoiceName,
   parseClockToSeconds,
+  shouldBeEphemeral,
   weatherLabel,
+  type DiscordInteraction,
 } from '../src/lib/commands';
 import { buildWebUrl } from '../src/handlers/worker';
 
@@ -132,6 +134,99 @@ test('buildWebUrl: 空文字はnull（呼び出し側で未設定エラーを返
 
 test('buildWebUrl: パス無しの短いoriginでも動く', () => {
   assert.equal(buildWebUrl('https://x.jp'), 'https://x.jp/running');
+});
+
+// ── shouldBeEphemeral ─────────────────────────────────────────────────
+// `/run add` `/run rank` は private:true のときだけ ephemeral、それ以外
+// （list/delete/web/me、/run-admin 全サブコマンド、未知・不正な構造）は常に ephemeral。
+
+/** テスト用に最小限の DiscordInteraction を組み立てる。 */
+function buildInteraction(
+  commandName: string,
+  subName: string,
+  options: { name: string; type: number; value?: string | number | boolean }[] = [],
+): DiscordInteraction {
+  return {
+    id: 'i1',
+    application_id: 'a1',
+    type: 2,
+    token: 't1',
+    data: {
+      name: commandName,
+      options: [{ name: subName, type: 1, options }],
+    },
+  };
+}
+
+test('shouldBeEphemeral: /run add で private 未指定は公開(false)', () => {
+  const interaction = buildInteraction('run', 'add', []);
+  assert.equal(shouldBeEphemeral(interaction), false);
+});
+
+test('shouldBeEphemeral: /run add で private:false は公開(false)', () => {
+  const interaction = buildInteraction('run', 'add', [{ name: 'private', type: 5, value: false }]);
+  assert.equal(shouldBeEphemeral(interaction), false);
+});
+
+test('shouldBeEphemeral: /run add で private:true は本人のみ(true)', () => {
+  const interaction = buildInteraction('run', 'add', [{ name: 'private', type: 5, value: true }]);
+  assert.equal(shouldBeEphemeral(interaction), true);
+});
+
+test('shouldBeEphemeral: /run rank で private 未指定は公開(false)', () => {
+  const interaction = buildInteraction('run', 'rank', []);
+  assert.equal(shouldBeEphemeral(interaction), false);
+});
+
+test('shouldBeEphemeral: /run rank で private:true は本人のみ(true)', () => {
+  const interaction = buildInteraction('run', 'rank', [{ name: 'private', type: 5, value: true }]);
+  assert.equal(shouldBeEphemeral(interaction), true);
+});
+
+test('shouldBeEphemeral: /run list は常に本人のみ(true)', () => {
+  const interaction = buildInteraction('run', 'list', []);
+  assert.equal(shouldBeEphemeral(interaction), true);
+});
+
+test('shouldBeEphemeral: /run me は常に本人のみ(true)', () => {
+  const interaction = buildInteraction('run', 'me', []);
+  assert.equal(shouldBeEphemeral(interaction), true);
+});
+
+test('shouldBeEphemeral: /run delete は常に本人のみ(true)', () => {
+  const interaction = buildInteraction('run', 'delete', []);
+  assert.equal(shouldBeEphemeral(interaction), true);
+});
+
+test('shouldBeEphemeral: /run web は常に本人のみ(true)', () => {
+  const interaction = buildInteraction('run', 'web', []);
+  assert.equal(shouldBeEphemeral(interaction), true);
+});
+
+test('shouldBeEphemeral: /run-admin threshold-set は常に本人のみ(true)', () => {
+  const interaction = buildInteraction('run-admin', 'threshold-set', []);
+  assert.equal(shouldBeEphemeral(interaction), true);
+});
+
+test('shouldBeEphemeral: 未知のコマンド名は安全側で本人のみ(true)', () => {
+  const interaction = buildInteraction('unknown-command', 'add', []);
+  assert.equal(shouldBeEphemeral(interaction), true);
+});
+
+test('shouldBeEphemeral: data が欠けた不正な構造は安全側で本人のみ(true)', () => {
+  const interaction: DiscordInteraction = { id: 'i1', application_id: 'a1', type: 2, token: 't1' };
+  assert.equal(shouldBeEphemeral(interaction), true);
+});
+
+test('shouldBeEphemeral: options が欠けた不正な構造は安全側で本人のみ(true)', () => {
+  const interaction: DiscordInteraction = {
+    id: 'i1',
+    application_id: 'a1',
+    type: 2,
+    token: 't1',
+    data: { name: 'run' },
+  };
+  assert.equal(shouldBeEphemeral(interaction), true);
 });
 
 if (failures > 0) {
