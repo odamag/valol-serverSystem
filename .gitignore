@@ -4,10 +4,16 @@ generate_hash.php
 site_config.php
 discord_config.php
 api/ai_config.php
+api/running/config.php
 
 # AWS SDK（大容量バイナリ）
 aws.phar
 lib/aws.phar
+
+# AWS(CDK)
+aws/node_modules/
+aws/cdk.out/
+aws/.env
 
 # 実行時データ(本番の実データを誤ってコミット/上書きしないため)
 db-folder/*.db

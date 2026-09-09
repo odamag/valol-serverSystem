@@ -51,3 +51,45 @@ jobs:
         run: |
           find api games lib -name '*.php' -print0 \
             | xargs -0 -n1 -P4 php -l
+
+  cdk:
+    name: AWS(CDK)の型チェック
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # aws/ は別作業(CDKスタック構築)と並行して追加されている途中のディレクトリなので、
+      # まだ存在しない/package-lock.jsonが無い状態でこのジョブが動いても
+      # 落ちないようにここでガードする。aws/ が揃った後は普通に型チェックが走る。
+      - name: Check aws/ ディレクトリの存在確認
+        id: check-aws
+        run: |
+          if [ -f aws/package-lock.json ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Node.js
+        if: steps.check-aws.outputs.exists == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: aws/package-lock.json
+
+      - name: Install dependencies
+        if: steps.check-aws.outputs.exists == 'true'
+        working-directory: aws
+        run: npm ci
+
+      - name: Type check
+        if: steps.check-aws.outputs.exists == 'true'
+        working-directory: aws
+        run: npx tsc --noEmit
+
+      - name: cdk synth
+        if: steps.check-aws.outputs.exists == 'true'
+        working-directory: aws
+        run: npx cdk synth

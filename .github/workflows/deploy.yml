@@ -58,6 +58,7 @@ jobs:
             --exclude-glob '.claude/' \
             --exclude-glob 'frontend/' \
             --exclude-glob 'node_modules/' \
+            --exclude-glob 'aws/' \
             --exclude-glob 'document/' \
             --exclude-glob 'db-folder/' \
             --exclude-glob '.DS_Store' \
@@ -72,6 +73,8 @@ jobs:
             --exclude-glob 'api/ai_config.php.example' \
             --exclude-glob 'api/lol/config.php' \
             --exclude-glob 'api/lol/config.php.example' \
+            --exclude-glob 'api/running/config.php' \
+            --exclude-glob 'api/running/config.php.example' \
             --exclude-glob 'lib/aws.phar' \
             ./ "$FTP_SERVER_DIR"
           bye

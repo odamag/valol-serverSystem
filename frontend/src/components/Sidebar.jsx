@@ -10,6 +10,7 @@ const navItems = [
   { to: '/lol-predict',  label: 'LoL予測',   icon: '🎯' },
   { to: '/val-predict',  label: 'VAL予測',   icon: '🔫' },
   { to: '/arena',        label: 'バンピック', icon: '🎴' },
+  { to: '/running',      label: 'ランニング', icon: '🏃' },
 ]
 
 export default function Sidebar({ isOpen, onClose }) {

@@ -1,0 +1,11 @@
+<?php
+// 本番では api/running/config.php としてFTPで手動配置する
+// （.gitignore とデプロイの --exclude-glob の両方に入っているため、Git でもFTPミラーでも運ばれない）
+//
+// shared_secret は `openssl rand -hex 32` で生成し、SSM の
+// /running/proxy-shared-secret と同じ値にすること。
+return [
+    'api_base'      => 'https://xxxxxxxx.execute-api.ap-northeast-1.amazonaws.com',
+    'shared_secret' => '...',
+    'timeout'       => 10,
+];

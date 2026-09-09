@@ -1,0 +1,33 @@
+{
+  "name": "running-aws",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ランニング記録 Discord ボットの AWS 基盤 (CDK)",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "test": "ts-node test/jst.test.ts && ts-node test/validate.test.ts && ts-node test/commands.test.ts && ts-node test/leaderboard.test.ts && ts-node test/roles.test.ts && ts-node test/s3.test.ts",
+    "synth": "cdk synth",
+    "deploy": "cdk deploy",
+    "register": "node --env-file=.env -r ts-node/register scripts/register-commands.ts"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-dynamodb": "3.1127.0",
+    "@aws-sdk/client-lambda": "3.1127.0",
+    "@aws-sdk/client-s3": "3.1127.0",
+    "@aws-sdk/client-ssm": "3.1127.0",
+    "@aws-sdk/lib-dynamodb": "3.1127.0",
+    "@aws-sdk/s3-presigned-post": "3.1127.0",
+    "@aws-sdk/s3-request-presigner": "3.1127.0",
+    "@types/aws-lambda": "8.10.163",
+    "@types/node": "26.5.0",
+    "aws-cdk": "2.1140.0",
+    "esbuild": "0.28.2",
+    "ts-node": "10.9.2",
+    "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "2.268.0",
+    "constructs": "10.8.1",
+    "source-map-support": "0.5.21"
+  }
+}
