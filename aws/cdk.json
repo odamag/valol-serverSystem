@@ -75,10 +75,10 @@
     "@aws-cdk/aws-ec2:securityGroupDisableInlineRules": false,
     "@aws-cdk/aws-stepfunctions-tasks:useNewS3UriParametersForBedrockInvokeModelTask": true,
 
-    "siteOrigin": "http://localhost:5173",
-    "discordAppId": "PLACEHOLDER_DISCORD_APP_ID",
-    "discordPublicKey": "PLACEHOLDER_DISCORD_PUBLIC_KEY",
-    "discordGuildId": "PLACEHOLDER_DISCORD_GUILD_ID",
+    "siteOrigin": "https://valol.jellybean.jp",
+    "discordAppId": "1547229953106513940",
+    "discordPublicKey": "8de36f6fa5d1bda0af3363d6df6c48270e395b3097b6ae2d2fe3a584b7a7d835",
+    "discordGuildId": "1294661276399571046",
     "githubRepo": "odamag/valol-serverSystem"
   }
 }
