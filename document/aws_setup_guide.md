@@ -213,9 +213,14 @@ Discord Bot Token と、ロリポップ PHP ↔ AWS 間のリクエストを検�
 
 ### C-1. CLI で投入する場合（Git Bash を推奨）
 
-> **Windows の PowerShell では `$(openssl rand -hex 32)` のようなコマンド置換記法や
-> `openssl` コマンド自体が標準では使えない。** Git Bash（Git for Windows に同梱）を使うのが
-> 一番簡単。PowerShell からどうしてもやる場合の代替コマンドも併記する。
+> **`openssl` は Git for Windows に同梱されているが、PowerShell の PATH には通っていない。**
+> 下の Git Bash 用コマンドを PowerShell にそのまま貼ると、こうなる:
+>
+> 1. `openssl : 用語 'openssl' は ... 認識されません`（PATH に無い）
+> 2. 続けて `argument --value: expected one argument`（1 が失敗して `$(...)` が空になった巻き添え）
+>
+> エラーは2つ出るが原因は1つ目だけ。Git Bash（Git for Windows 同梱）で実行するのが一番簡単で、
+> PowerShell のまま進めたい場合は後述の代替コマンドを使う。
 
 **Git Bash の場合:**
 ```bash
@@ -238,10 +243,16 @@ openssl rand -hex 32
 **PowerShell の場合（`openssl` が無い環境向けの代替の乱数生成）:**
 ```powershell
 $bytes = New-Object byte[] 32
-[System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+[System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
 $secret = ($bytes | ForEach-Object { $_.ToString('x2') }) -join ''
 $secret
 ```
+
+> `RandomNumberGenerator::Fill()` は .NET Core 2.1 以降のメソッドで、**Windows PowerShell 5.1
+> （.NET Framework 上で動作）には存在しない**（`does not contain a method named 'Fill'` になる）。
+> 上記の `Create().GetBytes()` は PowerShell 5.1 / 7 のどちらでも動く。
+> `Get-Random` は暗号学的に安全な乱数ではないので、共有シークレットの生成には使わないこと。
+
 表示された64文字の16進文字列を控えたうえで、`aws ssm put-parameter` の `--value` に
 そのまま渡す（PowerShell でも `aws` コマンド自体は動く）。
 ```powershell
@@ -249,10 +260,17 @@ aws ssm put-parameter --profile running --region ap-northeast-1 `
   --name /running/proxy-shared-secret --type SecureString --value $secret
 ```
 
-> **`proxy-shared-secret` の値は必ず控えること。** SSM に登録した後は
-> （コンソール・CLI どちらからも）平文では読み返せない設計になっている前提で運用する。
-> 忘れた場合は新しい値を生成して `put-parameter` を再実行（上書き）し、
-> `api/running/config.php` 側も同じ値に書き換える。
+> **`proxy-shared-secret` の値は控えておくこと。** ただし控え忘れても再生成は不要で、
+> `--with-decryption` を付ければ平文で読み返せる。
+>
+> ```powershell
+> aws ssm get-parameter --profile running --region ap-northeast-1 `
+>   --name /running/proxy-shared-secret --with-decryption --query Parameter.Value --output text
+> ```
+>
+> 値を変更したい場合は新しい値で `put-parameter` を再実行（上書き）し、
+> **`api/running/config.php` 側も必ず同じ値に書き換える**こと。片方だけ変えると
+> Lambda 側の署名検証が通らず、Web からの操作が一律 401 になる。
 
 ### C-2. コンソールから投入する場合
 
