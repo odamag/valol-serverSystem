@@ -330,7 +330,7 @@ npx cdk deploy RunningData RunningApp --profile running
 デプロイ実行後、ターミナルの出力（CDK の Outputs）に `HttpApiUrl` が表示される。
 ```
 Outputs:
-RunningApp.HttpApiUrl = https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com/
+RunningApp.HttpApiUrl = https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com
 ```
 この値を控える（チェックリスト #8）。出力を見逃した／閉じてしまった場合は、
 コンソールの API Gateway → 対象の HTTP API →「ステージ」から呼び出し URL を確認できる。
@@ -339,11 +339,23 @@ RunningApp.HttpApiUrl = https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.
 
 1. https://discord.com/developers/applications で対象アプリケーションを開く。
 2. 「General Information」タブの「INTERACTIONS ENDPOINT URL」欄に、
-   `<HttpApiUrl>discord/interactions` を貼り付ける。
-   > `HttpApiUrl` の末尾に既にスラッシュが付いているので、二重スラッシュにならないよう
-   > 貼り付け後に URL 全体を目視確認すること
-   > （例: `https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com/discord/interactions`）。
+   `<HttpApiUrl>/discord/interactions` を貼り付ける。
+   > **`HttpApiUrl` の末尾にスラッシュは付いていない**ので、自分で `/` を足すこと。
+   > 足し忘れると `...amazonaws.comdiscord/interactions` という壊れた URL になり、
+   > ホスト名が解決できずに Discord 側の保存が失敗する。
+   > （正: `https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com/discord/interactions`）
 3. 「Save Changes」をクリックする。
+
+> **登録前に自分で確かめることもできる。** 不正な署名を付けて叩き、`401` が返れば
+> エンドポイントは正しく動いている（Discord が登録時に行う検証と同じこと）。
+>
+> ```bash
+> curl -s -o /dev/null -w "%{http_code}
+" -X POST "<HttpApiUrl>/discord/interactions" >   -H 'Content-Type: application/json' >   -H 'x-signature-ed25519: 00' -H 'x-signature-timestamp: 1' -d '{"type":1}'
+> ```
+>
+> `401` なら OK。`000` ならホスト名が解決できていない（URL の組み立てミス）。
+> `500` なら Lambda 側の例外なので CloudWatch Logs を見る。
 
 ### D-3. 保存が通ったことの意味
 
@@ -361,8 +373,8 @@ RunningApp.HttpApiUrl = https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.
 2. **`DISCORD_PUBLIC_KEY` が正しいか確認**: Lambda コンソール → 対象関数 →
    「設定」タブ →「環境変数」を開き、B-2 で控えた Public Key と一致しているか目視で比較する。
    ずれている場合は `aws/cdk.json` の `discordPublicKey` を修正して再デプロイする。
-3. **URL の末尾を再確認**: `<HttpApiUrl>` の末尾スラッシュと `discord/interactions` の
-   先頭が重複して `//discord/interactions` のようになっていないか確認する。
+3. **URL を再確認**: `<HttpApiUrl>` と `discord/interactions` の間にスラッシュが
+   ちょうど1つあるか（`HttpApiUrl` 自体には末尾スラッシュが付かない）。
 
 ---
 
@@ -591,6 +603,41 @@ Discord でログインしたことがないアカウントで動作確認する
 
 **まず G-2 のロール階層を疑うこと。** 権限（Permissions）の設定ミスではなく、
 Bot のロールが管理対象ロールより下に配置されていることが原因であるケースが大半。
+
+### デプロイが `ReservedConcurrentExecutions ... below its minimum value of [10]` で失敗する
+
+新規 AWS アカウントは Lambda の同時実行上限が **10**（従来の 1000 ではない）で、利用実績に
+応じて自動的に引き上げられる。AWS は未予約分を最低10残すことを要求するため、上限が 10 の
+アカウントでは**予約同時実行数を1つも設定できない**。
+
+現在のコードは予約同時実行数を既定で設定しないので、このエラーは出ないはずである。
+もし `cdk.json` の context に `lambdaReservedConcurrency` を足していたら、それを外すか
+値を小さくすること。
+
+現在の上限は次のコマンドで確認できる。
+
+```powershell
+aws lambda get-account-settings --profile running --region ap-northeast-1 --query AccountLimit
+```
+
+> 上限が低いうちは、その上限自体が暴走課金への歯止めになっている。加えて API Gateway 側の
+> スロットリング（20rps / burst 40）が入口を絞っているため、予約同時実行数を設定しなくても
+> 課金が暴走する経路は塞がれている。
+
+### スタックが `ROLLBACK_COMPLETE` で止まっている
+
+CREATE に失敗したスタックは `ROLLBACK_COMPLETE` になり、**その状態のままでは更新できない**。
+原因を直したうえで `cdk deploy` を再実行すれば、CDK が失敗したスタックを削除してから
+作り直す。手動で消したい場合は次のコマンド。
+
+```powershell
+cd aws
+npx cdk destroy RunningApp --profile running
+```
+
+> `RunningData`（DynamoDB / S3）は `RemovalPolicy.RETAIN` なので、`cdk destroy` しても
+> テーブルとバケットは残る（記録を失わないための意図的な設定）。`RunningApp` は
+> Lambda と API Gateway だけなので、消して作り直して構わない。
 
 ### 一度作った環境を消したいとき
 
