@@ -27,10 +27,10 @@ GitHub の設定画面）を操作できない。そのため、環境構築の�
 |---|---|---|---|
 | 1 | AWS アカウント ID | ☐ | `cdk bootstrap` のコマンド引数 |
 | 2 | IAM 管理者ユーザーのアクセスキー ID / シークレットキー | ☐ | `aws configure --profile running` |
-| 3 | Discord Application ID | ☐ | `aws/cdk.json` の `discordAppId` |
+| 3 | Discord Application ID | ☐ | `aws/cdk.json` の `discordAppId`、`aws/.env` の `DISCORD_APP_ID` |
 | 4 | Discord Public Key | ☐ | `aws/cdk.json` の `discordPublicKey` |
-| 5 | Discord Bot Token | ☐ | SSM パラメータ `/running/discord-bot-token` |
-| 6 | Discord Guild ID（サーバーID） | ☐ | `aws/cdk.json` の `discordGuildId` |
+| 5 | Discord Bot Token | ☐ | SSM パラメータ `/running/discord-bot-token`、`aws/.env` の `DISCORD_BOT_TOKEN` |
+| 6 | Discord Guild ID（サーバーID） | ☐ | `aws/cdk.json` の `discordGuildId`、`aws/.env` の `DISCORD_GUILD_ID` |
 | 7 | `proxy-shared-secret`（自分で生成する乱数） | ☐ | SSM パラメータ `/running/proxy-shared-secret`、`api/running/config.php` の `shared_secret` |
 | 8 | `HttpApiUrl`（CDK デプロイ出力） | ☐ | Discord の Interactions Endpoint URL、`api/running/config.php` の `api_base` |
 | 9 | GitHub Actions 用 IAM ロール ARN（`RunningGithubOidc` の出力） | ☐ | GitHub リポジトリの Actions Variables `AWS_DEPLOY_ROLE_ARN` |
@@ -292,7 +292,7 @@ aws ssm get-parameters --profile running --region ap-northeast-1 \
 
 ---
 
-## D. 初回デプロイと Interactions Endpoint URL の設定（Phase 0・所要目安 20〜30分）
+## D. 初回デプロイ・Endpoint URL 登録・コマンド登録（Phase 0・所要目安 25〜40分）
 
 > **初回のデプロイは必ずローカルから行う。** GitHub Actions（`Deploy AWS (CDK)`）は
 > まだ使えない。Actions が使う IAM ロールを作るのが E-1 で、この章より後だからである。
@@ -365,7 +365,44 @@ RunningApp.HttpApiUrl = https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.
 返せないと、Discord は URL の登録自体を拒否する（保存ボタンを押すとエラーが表示される）。
 つまりこの保存操作自体が Lambda 側の署名検証ロジックの動作確認になっている。
 
-### D-4. 保存に失敗する場合の切り分け手順
+### D-4. スラッシュコマンドを Discord に登録する
+
+**この手順を飛ばすと、Discord に `/run` が一切出てこない。** Interactions Endpoint URL の
+登録（D-2）は「Discord からの呼び出しを受け取る口」を教えるだけで、どんなコマンドが
+あるかは別途登録する必要がある。
+
+1. `aws/.env.example` をコピーして `aws/.env` を作り、B で控えた値を入れる。
+
+   ```
+   DISCORD_APP_ID=<チェックリスト #3>
+   DISCORD_GUILD_ID=<チェックリスト #6>
+   DISCORD_BOT_TOKEN=<チェックリスト #5>
+   ```
+
+   > `aws/.env` は `.gitignore` 済み。**Bot Token を含むので絶対にコミットしないこと。**
+
+2. 登録スクリプトを実行する。
+
+   ```bash
+   cd aws
+   npm run register
+   ```
+
+   成功すると `コマンド登録に成功しました: 200` と登録されたコマンド数が表示される。
+
+3. Discord クライアントを `Ctrl+R` で再読み込みし、チャットで `/run` と打って候補が
+   出ることを確認する。
+
+> **登録は「一括上書き」である。** スクリプトは `PUT .../commands` で全コマンドを置き換える
+> ため、`aws/src/lib/commands.ts` にコマンドを足しても `register-commands.ts` の `COMMANDS`
+> 配列に並べ忘れると、そのコマンドは登録されない（既にあるものは Discord から消える）。
+>
+> **コマンド定義を変更したら、そのつど `npm run register` をやり直すこと。** `cdk deploy` は
+> Lambda のコードを更新するだけで、Discord 側のコマンド定義には影響しない。
+
+> ギルドコマンドとして登録しているため反映はほぼ即時。グローバルコマンドだと最大1時間かかる。
+
+### D-5. D-2 の保存に失敗する場合の切り分け手順
 
 1. **CloudWatch Logs を見る**: コンソール → CloudWatch → 左メニュー「ロググループ」→
    `/aws/lambda/RunningApp-Interactions...`（スタック名から始まるロググループを探す）を開き、
@@ -590,7 +627,8 @@ Discord でログインしたことがないアカウントで動作確認する
 
 以下の順で確認する。
 
-1. `npm run register`（コマンド登録スクリプト）が正常終了したか、エラーが出ていないか。
+1. **そもそも D-4 のコマンド登録（`npm run register`）を実行したか。** 未実行なら
+   コマンドは1つも存在しない。実行済みなら正常終了したか、エラーが出ていないか。
 2. **ギルドコマンドとして登録されているか。** グローバルコマンドとして登録した場合、
    Discord 側への反映に最大1時間かかることがある。ギルド限定登録（Guild ID を指定した
    登録）ならほぼ即時反映されるはずなので、急ぐ場合はギルド登録になっているか確認する。
