@@ -33,6 +33,27 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+  games-test:
+    name: ゲーム(games/)のテスト
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # games/_shared と games/race は依存パッケージなしの node --test なので npm ci は不要。
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Test games/_shared
+        working-directory: games/_shared
+        run: npm test
+
+      - name: Test games/race
+        working-directory: games/race
+        run: npm test
+
   php-lint:
     name: PHPの構文チェック
     runs-on: ubuntu-latest

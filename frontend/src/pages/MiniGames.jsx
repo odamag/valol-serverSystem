@@ -27,6 +27,13 @@ const games = [
     description: 'HUNTER×HUNTER風の駒を積み重ねる対戦ボードゲーム。P2Pでリアルタイム対戦。',
     tag: '2プレイヤー',
   },
+  {
+    href: '/games/race/',
+    icon: '🏎️',
+    title: 'アイテムレース',
+    description: 'アイテムとブーストで最後まで逆転できるカートレース。最大8人でP2P対戦、ボットとの練習も。',
+    tag: '2〜8プレイヤー',
+  },
 ]
 
 export default function MiniGames() {

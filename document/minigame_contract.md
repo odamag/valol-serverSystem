@@ -137,9 +137,14 @@ GuestGameNet {
 
 - ブラウザは、裏に回ったタブの `requestAnimationFrame` を止める。**ホストの処理が止まると全員のゲームが止まる** ため、
   枠は `update` を描画と切り離して回す。
-- `_shared/frame/ticker.js`:画面が見えている間は `requestAnimationFrame`、`document.hidden` の間は
-  Web Worker(`ticker.worker.js`)の `setInterval(1000 / 60)` から `update(now)` を呼ぶ。
-  Worker のタイマーは、メインスレッドのタイマーほど強く間引かれない。
+- `_shared/frame/ticker.js`:Web Worker(`ticker.worker.js`)の `setInterval(1000 / 60)` から `update(now)` を**常に**呼び、
+  画面が見えている間は `requestAnimationFrame` からも `update` と `render` を呼ぶ。
+  Worker のタイマーは、メインスレッドのタイマーほど強く間引かれない。見えている間も Worker を回すのは、ウィンドウが
+  隠れているだけで `document.hidden` が false のまま rAF が 1Hz 程度に間引かれることがあるため(実装して見つけた点)。
+  そのため **`update` は短い間隔で何度呼ばれても、時刻だけで進むように書く**(1回の呼び出しでステップを回さないこともある。
+  「押した瞬間」の入力はステップで使うまで取っておく)。
+- ゲームの固定ステップは、1回の `update` で回す数に上限を置き、上限を超えた遅れは捨てて `now` に追いつく
+  (ゲームの時刻が本当の時刻から遅れると、残り時間が進まず、ゲストの `hostNow` ともずれるため)。
 - `render` は見えている間だけ呼ぶ。
 - ゲストでも同じようにする(裏にしても通信の応答が止まらないように)。裏にした人の入力は、すべて離した扱いになる。
 
@@ -147,7 +152,10 @@ GuestGameNet {
 
 - **合言葉**:ホストの PeerJS ID は `bo5-{gameId または 'arena'}-{合言葉}`。その ID を取れたらホスト、取れなければゲストとして接続する。
   ゲストの ID はランダム。
-- **本人確認**:`playerId` は `localStorage` に保存した UUID。同じ `playerId` が戻ってきたら同じ slot に戻す。
+- **本人確認**:`playerId` は `sessionStorage` に保存した UUID(タブごと。同じタブの再読み込みでは残る)。同じ `playerId` が戻ってきたら同じ slot に戻す。
+  `localStorage` にすると、同じブラウザの2つのタブが同じ ID になり、ホストがゲストを自分と取り違える(実装して見つけた点)。
+- **切断の検知**:PeerJS の `close` は、相手がタブを閉じてもなかなか来ないことがある。ゲストは1秒ごとに `ping`、ホストは `pong` を返すので、
+  `net/peer.js` は **5 秒なにも届かなければ切れたとみなす**。タブを閉じるとき(`pagehide`)は Peer を壊して、相手にすぐ伝える。
 - **受け付け**:名簿が `maxPlayers` に達していれば `reject: 'full'`。プロトコルのバージョンが違えば `reject: 'version'`。
   ゲーム中に新しい人が来たら受け付けて「観戦待ち」にし、次のゲームから名簿に入れる。
 - **ゲーム中にゲストが切断したとき**:
