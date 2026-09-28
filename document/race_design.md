@@ -667,6 +667,7 @@ createInput(targetElement) → { poll(): { throttle, steer, useItem, backward, l
 ## 11. URL パラメータ
 
 共通のもの(`?room=`、`?name=`、`?solo=1`、`?bots=N`、`?debug=1`)は約束 9節。ゲーム固有のものは `settings` としてゲームに渡る。
+`autopilot` / `view` / `latency` は `game.js` だけが読み、`makeConfig` には渡さない(`RaceConfig.autopilot` などと名前がぶつかるため)。
 
 | パラメータ | 意味(元仕様の起動引数) |
 |---|---|

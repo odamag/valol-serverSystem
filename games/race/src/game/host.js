@@ -515,6 +515,9 @@ export class RaceHost {
       const { rankBySlot, gapBySlot } = standings;
       const players = this.roster.map((p) => {
         const pl = this._players.get(p.slot);
+        // 進み具合のバー用に、周回とチェックポイント通過数からの概算ではなく実際の距離(m)を送る
+        // (T11 で見つけた不具合。クライアントは dist / (laps * L) を progress に使う)。
+        const dist = Math.round(raceDistance(pl.prog.lap, pl.prog.nextCp, pl.s, this.L, this.N) * 10) / 10;
         return {
           slot: p.slot,
           lap: pl.prog.lap,
@@ -522,6 +525,7 @@ export class RaceHost {
           rank: rankBySlot.get(p.slot),
           gapRatio: gapBySlot.get(p.slot),
           place: pl.place,
+          dist,
         };
       });
       const elapsedMs = this.now - this.startAt;

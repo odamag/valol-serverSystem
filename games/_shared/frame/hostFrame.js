@@ -164,13 +164,15 @@ export function createHostFrame(opts) {
       onResult: (result) => handleResult(gi, result),
     };
 
-    state.gameInstance = definition.createGame(ctx);
-
+    // startGame を createGame より先に送る。ゲームが生成直後に送ったメッセージが startGame より先に届くと、
+    // ゲストはまだ gi を知らないので捨ててしまうため(同じ接続の中では送った順に届く)。
     const wireRoster = confirmed.map((p) => ({ slot: p.slot, name: p.name, kind: p.kind }));
     for (const conn of remoteConns) {
       if (!conn.connected) continue;
       conn.channel.frame.send(msg.startGame(gi, definition.id, seedForRound, wireRoster, settings || {}));
     }
+
+    state.gameInstance = definition.createGame(ctx);
 
     events.onGameStart?.({ gi, roster: confirmed, seed: seedForRound, settings: settings || {} });
   }

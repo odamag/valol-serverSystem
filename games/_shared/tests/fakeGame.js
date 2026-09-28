@@ -7,12 +7,13 @@
 
 /**
  * @param {{ id?: string, maxPlayers?: number, minPlayers?: number, resultDelayMs?: number,
- *            resultFn?: (ctx: object) => object }} [opts]
+ *            resultFn?: (ctx: object) => object, sendOnCreate?: object }} [opts]
+ *   sendOnCreate: ホストが createGame の中ですぐ全員へ送るゲームのメッセージ(枠の送信順の確認用)
  * @returns {{ definition: object, instances: Array<object> }}
  *   `instances` は `createGame` が呼ばれるたびに積まれる記録の配列(検査用)。
  */
 export function createFakeGameDefinition(opts = {}) {
-  const { id = 'FAKE', maxPlayers = 8, minPlayers = 1, resultDelayMs = 200, resultFn = null } = opts;
+  const { id = 'FAKE', maxPlayers = 8, minPlayers = 1, resultDelayMs = 200, resultFn = null, sendOnCreate = null } = opts;
 
   const instances = [];
 
@@ -36,6 +37,7 @@ export function createFakeGameDefinition(opts = {}) {
 
     if (ctx.role === 'host') {
       ctx.net.onMessage((slot, m) => record.received.push({ slot, m }));
+      if (sendOnCreate) ctx.net.broadcast(sendOnCreate);
     } else {
       ctx.net.onMessage((m) => record.received.push({ m }));
     }

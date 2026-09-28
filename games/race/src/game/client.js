@@ -597,10 +597,12 @@ export class RaceClient {
       let status = 'racing';
       if (left) status = 'left';
       else if (finishedFlag || (info && info.place != null)) status = 'finished';
-      const lap = info ? info.lap : 0;
-      const nextCp = info ? info.nextCp : 1;
-      // progress メッセージには s が入っていないので、チェックポイントの通過数から進み具合を概算する(判断して決めた点)
-      const progress = clamp((lap * N + (nextCp - 1)) / (laps * N), 0, 1);
+      // 進み具合は、progress メッセージに乗る実際の距離 dist(m)を使う(T11 で見つけた不具合の直し。
+      // host.js 参照)。dist / (laps * L) がレース全体に対する割合(設計書 10.2節)。
+      // info がまだ届いていない(レース開始直後)ときだけ、旧来のチェックポイント通過数からの概算にする。
+      const progress = info && info.dist != null
+        ? clamp(info.dist / (laps * this.course.length), 0, 1)
+        : clamp(((info ? info.lap : 0) * N + (info ? info.nextCp - 1 : 0)) / (laps * N), 0, 1);
       return {
         slot: p.slot,
         name: p.name,

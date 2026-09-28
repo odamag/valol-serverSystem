@@ -151,6 +151,20 @@ test('startGame: 全員で同じ seed・同じ名簿の createGame が呼ばれ�
   assert.equal(guest.phase, 'result');
 });
 
+test('ゲームが createGame の中ですぐ送ったメッセージも、ゲストに届く(startGame が先に届く)', () => {
+  const fake = createFakeGameDefinition({ sendOnCreate: { t: 'hi' } });
+  const { host } = makeHost({ fake });
+  const { guest } = connectGuest(host, { playerId: 'g-1', fake });
+
+  advance([host, guest], 0, 50);
+  host.startGame({}, 1000);
+  advance([host, guest], 1000, 1050);
+
+  const guestInst = fake.instances.find((r) => r.role === 'guest');
+  assert.ok(guestInst, 'ゲストでも createGame される');
+  assert.deepEqual(guestInst.received.map((r) => r.m.t), ['hi']);
+});
+
 test('同じ playerId で再接続すると同じ slot に戻る', () => {
   const fake = createFakeGameDefinition();
   const { host } = makeHost({ fake });
