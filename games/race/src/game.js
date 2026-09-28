@@ -222,6 +222,19 @@ export function createGame(ctx) {
 
   /** @param {number} now */
   function update(now) {
+    // input.poll() は render() ではなく、固定ステップを回す前にここで1回だけ呼ぶ(T12b で直した点)。
+    // render() はタブが裏に回ると requestAnimationFrame が止まって呼ばれなくなるが、update()(ticker 側)は
+    // 動き続けるので、render() の中でだけ poll していると「最後に押していたキー」の入力が裏タブでも
+    // 効き続けてしまう(例:離したはずの throttle が残ってカートが走り続ける)。document.hidden のときは
+    // 中立の入力にする(念のため。input.js 自身も visibilitychange でキーを離した扱いにしている)。
+    if (input) {
+      const polled = (typeof document !== 'undefined' && document.hidden)
+        ? { throttle: 0, steer: 0, useItem: false, backward: false, lookBack: false }
+        : input.poll();
+      // update は ticker の rAF と Worker の両方から呼ばれ、ステップを1回も回さない呼び出しもある。
+      // useItem は「押した瞬間」だけ true なので、ステップで使うまで残しておく(次の poll で消さない)。
+      currentInput = { ...polled, useItem: currentInput.useItem || polled.useItem };
+    }
     if (!hasStepped) {
       // 最初の update は基準時刻を覚えるだけ。
       hasStepped = true;
@@ -236,13 +249,17 @@ export function createGame(ctx) {
       doStep(stepNow, cfg.fixedDt);
       elapsed -= fixedDtMs;
       steps += 1;
+      currentInput = { ...currentInput, useItem: false }; // 1ステップで使ったら消す
     }
+    // 上限まで回してもまだ遅れているときは、残りを捨てて now に追いつく(ブラウザで見つけた点)。
+    // 描画が間引かれて update が遅い(例:1秒に1回)と、ゲームの時刻が本当の時刻からどんどん遅れ、
+    // 残り時間が進まず、ゲストの hostNow ともずれてしまうため。
+    if (elapsed >= fixedDtMs) stepNow = now - (elapsed % fixedDtMs);
   }
 
   /** @param {number} now */
   function render(now) {
     if (!ctx.dom || !renderReady || !renderer) return;
-    if (input) currentInput = input.poll();
 
     const viewSlot = view != null && clients.has(view)
       ? view
