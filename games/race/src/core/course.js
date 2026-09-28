@@ -284,6 +284,8 @@ export function buildCourse(data, cfg) {
   return {
     length,
     n,
+    roadHalfWidth,
+    wallLateral,
     xs,
     zs,
     ss,

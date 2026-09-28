@@ -241,6 +241,7 @@ Course {
   toWorld(s, lateral): { x, z }        // 中心線 + lateral * 左方向ベクトル(左 = (tz, -tx))
   project(x, z, hintIndex?): { s, lateral, index, tx, tz }
   surfaceAt(lateral): 'road' | 'grass' | 'wall'
+  roadHalfWidth, wallLateral: number   // COURSE_DATA の値(カートや弾の壁判定と描画が使う)
   checkpoints: Array<{ index, s }>     // index 0 はスタート/ゴールライン(s = 0)。s_k = k * L / N
   boostPads: Array<{ id, s, lateral }>
   itemBoxes: Array<{ id, row, s, lateral }>   // id = row * 5 + col
