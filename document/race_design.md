@@ -80,7 +80,7 @@
 games/race/
   index.html            importmap、PeerJS、canvas と HUD の入れ物。standalone を起動するだけ
   style.css
-  package.json          {"private": true, "type": "module", "scripts": {"test": "node --test tests/"}}
+  package.json          {"private": true, "type": "module", "scripts": {"test": "node --test"}}
   src/
     game.js             definition と createGame(ctx)(約束 2・3節)
     config.js           RaceConfig と makeConfig(overrides)

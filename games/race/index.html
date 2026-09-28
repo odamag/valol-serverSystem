@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>アイテムレース (MG01) - P2P対戦</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js"
+  }
+}
+</script>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+<div id="hud"></div>
+<div id="lobby"></div>
+
+<script type="module">
+  // standalone.js と game.js は後のタスク(T12 など)で作るので、T0 の時点では動かなくてよい。
+  import { startStandalone } from '../_shared/standalone/standalone.js';
+  import { definition } from './src/game.js';
+
+  const params = new URLSearchParams(location.search);
+  startStandalone(definition, {
+    controlsHelp: 'W/S/A/D:走行  Space:アイテム  S+Space:逆向きに投げる  C/X:後ろを見る(押している間。この間に使うと逆向きに投げる)',
+    parseSettings(urlParams) {
+      const settings = {};
+      if (urlParams.has('laps')) settings.laps = Number(urlParams.get('laps'));
+      if (urlParams.has('finishRule')) settings.finishRule = urlParams.get('finishRule');
+      return settings;
+    },
+  }, params);
+</script>
+</body>
+</html>

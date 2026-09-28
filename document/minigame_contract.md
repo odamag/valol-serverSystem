@@ -199,7 +199,7 @@ GuestGameNet {
 
 ```
 games/_shared/
-  package.json            {"private": true, "type": "module", "scripts": {"test": "node --test tests/"}}
+  package.json            {"private": true, "type": "module", "scripts": {"test": "node --test"}}
   core/rng.js             createRng(seed) → { next, range(a, b), int(n), pick(arr), shuffle(arr), fork() }(mulberry32)
   net/transport.js        Transport のインターフェース(JSDoc のみ)
   net/loopback.js         createLoopbackPair({ latencyMs = 0, jitterMs = 0, rng }) → [Transport, Transport]
