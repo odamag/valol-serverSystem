@@ -76,6 +76,9 @@ jobs:
             --exclude-glob 'api/running/config.php' \
             --exclude-glob 'api/running/config.php.example' \
             --exclude-glob 'lib/aws.phar' \
+            --exclude-glob 'games/*/tests/' \
+            --exclude-glob 'games/*/dev/' \
+            --exclude-glob 'games/*/package.json' \
             ./ "$FTP_SERVER_DIR"
           bye
           LFTP_EOF
