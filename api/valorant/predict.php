@@ -61,7 +61,6 @@ function pandaFetch(string $path): ?array {
     ]);
     $body = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
     if ($code !== 200 || !$body) return null;
     $data = json_decode($body, true);
     return is_array($data) ? $data : null;

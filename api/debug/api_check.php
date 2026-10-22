@@ -23,7 +23,6 @@ function checkApi(string $label, string $url, array $headers = [], int $timeout 
     $ms   = (int)((microtime(true) - $t0) * 1000);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $err  = curl_error($ch);
-    curl_close($ch);
 
     $data    = $body ? json_decode($body, true) : null;
     $preview = null;

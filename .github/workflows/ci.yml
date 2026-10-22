@@ -61,12 +61,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 本番のロリポップは PHP 7.4 以降。7.4 で通ることを確認しておけば、
-      # うっかり新しい構文(match式・enum・名前付き引数など)を混ぜても気づける。
+      # 本番のロリポップと同じ PHP 8.5 で構文を確認する。
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '7.4'
+          php-version: '8.5'
 
       - name: Lint
         run: |

@@ -16,7 +16,6 @@ function discordPost(string $url, array $fields): array {
         CURLOPT_TIMEOUT        => 10,
     ]);
     $body = curl_exec($ch);
-    curl_close($ch);
     return $body ? (json_decode($body, true) ?? []) : [];
 }
 
@@ -28,7 +27,6 @@ function discordGet(string $url, string $token): array {
         CURLOPT_TIMEOUT        => 10,
     ]);
     $body = curl_exec($ch);
-    curl_close($ch);
     return $body ? (json_decode($body, true) ?? []) : [];
 }
 
