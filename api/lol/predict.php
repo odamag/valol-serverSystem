@@ -55,7 +55,6 @@ function fetchLeagues(): ?array {
     ]);
     $body = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
 
     if ($code !== 200 || !$body) return null;
     $data = json_decode($body, true);
@@ -73,7 +72,6 @@ function fetchEsportsSchedule(): ?array {
     ]);
     $body = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
 
     if ($code !== 200 || !$body) return null;
     $data = json_decode($body, true);

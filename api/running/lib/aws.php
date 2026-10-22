@@ -57,12 +57,10 @@ function runningForward(array $config, string $method, string $path, string $que
     $responseBody = curl_exec($ch);
     if ($responseBody === false) {
         error_log('[running] curl error: ' . curl_error($ch));
-        curl_close($ch);
         return ['status' => 0, 'body' => null];
     }
 
     $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-    curl_close($ch);
 
     return ['status' => $status, 'body' => $responseBody];
 }
