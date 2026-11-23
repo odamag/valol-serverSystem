@@ -1,12 +1,12 @@
-//! GET /api/v1/lol/streak（LoL 戦績）。
-//!
-//! 【仮】T10 が中身を作る。
+//! GET /api/v1/lol/streak（LoL 戦績）。合言葉はミドルウェアで確かめる。
 
-use axum::response::Response;
+use axum::Json;
+use axum::extract::State;
+use serde_json::Value;
 
-use super::not_implemented;
+use crate::error::AppResult;
+use crate::state::AppState;
 
-/// GET /api/v1/lol/streak。【仮】
-pub async fn streak() -> Response {
-    not_implemented()
+pub async fn streak(State(state): State<AppState>) -> AppResult<Json<Value>> {
+    Ok(Json(state.lol.get(state.clock.now()).await?))
 }

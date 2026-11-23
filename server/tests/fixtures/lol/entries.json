@@ -1,0 +1,5 @@
+[
+  {"queueType": "RANKED_TFT", "tier": "GOLD", "rank": "I", "leaguePoints": 1, "wins": 1, "losses": 1},
+  {"queueType": "RANKED_SOLO_5x5", "tier": "GOLD", "rank": "II", "leaguePoints": 50, "wins": 10, "losses": 8},
+  {"queueType": "RANKED_FLEX_SR", "tier": "SILVER", "rank": "IV", "leaguePoints": 5, "wins": 3, "losses": 4}
+]

@@ -93,7 +93,7 @@ export default function LoLStreak() {
     setError(null)
     try {
       const [streakRes, versions] = await Promise.all([
-        fetch('/api/lol/streak.php').then(r => {
+        fetch('/api/v1/lol/streak').then(r => {
           if (!r.ok) throw new Error('API error')
           return r.json()
         }),
