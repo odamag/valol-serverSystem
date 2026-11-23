@@ -48,7 +48,8 @@ curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
   > /etc/apt/sources.list.d/caddy-stable.list
 apt-get update
-apt-get install -y caddy php8.3-fpm php8.3-sqlite3 php8.3-curl
+# mbstring と xml は aws.phar（AWS SDK）が使う。無いとゲームサーバーの状態の取得が 500 になる
+apt-get install -y caddy php8.3-fpm php8.3-sqlite3 php8.3-curl php8.3-mbstring php8.3-xml
 
 echo "== 3. ユーザー =="
 # serversystem: Rust を動かす（ログイン不可）。deploy: GitHub Actions が SSH で入る

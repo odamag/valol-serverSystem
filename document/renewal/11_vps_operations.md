@@ -63,7 +63,7 @@ PHP はリポジトリの中の決まった場所（`config.php`・`api/site_con
 そのため移行中は、`activate` がリリースの中にシンボリックリンクを張る（例：`releases/<id>/config.php -> /etc/serversystem/php/config.php`、`releases/<id>/db-folder -> /var/lib/serversystem/php/db-folder`）。
 PHP のコードは直さずに済む。
 
-PHP のバージョン: Ubuntu 24.04 の標準は PHP 8.3（今は 8.5）。PHP は移行中にしか使わないので、**標準の `php8.3-fpm`・`php8.3-sqlite3`・`php8.3-curl` を使う**。
+PHP のバージョン: Ubuntu 24.04 の標準は PHP 8.3（今は 8.5）。PHP は移行中にしか使わないので、**標準の `php8.3-fpm`・`php8.3-sqlite3`・`php8.3-curl`・`php8.3-mbstring`・`php8.3-xml`（後ろの 2 つは aws.phar が使う） を使う**。
 段階 1 の前に、手元か CI で残す PHP ファイルを 8.3 で `php -l` し、実際に動かして確かめる。
 8.5 にしか無い書き方で動かないところがあれば、そのときだけ ondrej/php の PPA で 8.5 を入れる。
 
