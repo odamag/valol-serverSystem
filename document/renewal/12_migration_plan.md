@@ -113,6 +113,7 @@ FROM discord_users du JOIN users u ON u.id = du.user_id;
 - 読んだ行ごとに `INSERT INTO users (id, discord_id, display_name, created_at, last_login_at) VALUES (?, ?, ?, ?, ?)` をする。`last_login_at` には `created_at` を入れる。
 - `discord_id` か `id` が既に `app.db` にあれば**飛ばす**（2 回流しても壊れない。切り替えの前に試しに流して、あとでもう一度流してよい）。
 - 旧 DB は**読み取り専用**で開く（`mode=ro`）。旧 DB には一切書き込まない。
+  - 旧 DB が WAL モードで `-wal`・`-shm` が残っていると、読み取り専用では開けなかったり最新の行が欠けたりする。流す前に PHP を止め、`sqlite3 auth.db 'PRAGMA wal_checkpoint(TRUNCATE);'` で書き戻してから写す。
 - 最後に「取り込んだ数・飛ばした数・Discord と紐付いていないので対象外にした数」を表示する。`--dry-run` のときは書き込まずに数だけ出す。
 - `users` の列は、作られた順番によって `created_at` などが有ったり無かったりする（04 の注記）。そのため **`users` からは `id` と `username` しか読まない**。日時は `discord_users.created_at` を使う。
 
