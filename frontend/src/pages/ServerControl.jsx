@@ -79,6 +79,7 @@ export default function ServerControl() {
   const [servers, setServers] = useState(null)
   const [message, setMessage] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
+  const [unauthorized, setUnauthorized] = useState(false)
   const prevServersRef = useRef({})
 
   function fireNotification(server) {
@@ -92,6 +93,10 @@ export default function ServerControl() {
   const fetchStatus = useCallback(async () => {
     try {
       const res = await fetch('/api/server/status.php', { credentials: 'include' })
+      if (res.status === 401) {
+        setUnauthorized(true)
+        return
+      }
       const data = await res.json()
       if (data.servers) {
         const prev = prevServersRef.current
@@ -110,10 +115,12 @@ export default function ServerControl() {
   }, [])
 
   useEffect(() => {
+    // 未ログイン（401）のあいだは、無駄な問い合わせをしないよう止める
+    if (unauthorized) return undefined
     fetchStatus()
     const interval = setInterval(fetchStatus, 5000)
     return () => clearInterval(interval)
-  }, [fetchStatus])
+  }, [fetchStatus, unauthorized])
 
   async function handleAction(action, target, instanceId) {
     if (action === 'start' && Notification.permission === 'default') {
@@ -128,6 +135,10 @@ export default function ServerControl() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, target, instanceId }),
       })
+      if (res.status === 401) {
+        setUnauthorized(true)
+        return
+      }
       const data = await res.json()
       if (data.message) setMessage(data.message)
       await fetchStatus()
@@ -142,12 +153,24 @@ export default function ServerControl() {
     <>
       <div className="page-header">
         <h1 className="page-title">⚡ サーバー起動</h1>
-        <p className="page-subtitle">Minecraft・Palworld・7 Days to Die の AWS サーバーを管理します</p>
+        <p className="page-subtitle">Minecraft の AWS サーバーを管理します</p>
       </div>
+
+      {unauthorized ? (
+        <div className="message-banner">
+          サーバーの操作にはログインが必要です。{' '}
+          <a
+            href="/login?next=/server"
+            onClick={() => sessionStorage.setItem('postLoginRedirect', '/server')}
+          >
+            ログイン画面へ
+          </a>
+        </div>
+      ) : null}
 
       {message && <div className="message-banner">{message}</div>}
 
-      {servers === null ? (
+      {unauthorized ? null : servers === null ? (
         <div className="loading-screen" style={{ minHeight: 'unset', padding: '60px 0' }}>
           <div className="loading-spinner" />
           <p>サーバー情報を取得中...</p>
