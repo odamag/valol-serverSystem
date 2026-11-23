@@ -21,6 +21,9 @@
 | [10_architecture.md](10_architecture.md) | 全体設計。決めたことの一覧、方針、API と URL の対応表、セッション・CSRF、Rust の構成、セキュリティ、まだ決まっていないこと、実装プランの分け方 |
 | [11_vps_operations.md](11_vps_operations.md) | VPS の構成（Ubuntu・Caddy・systemd）、シークレット、IAM、バックアップ、デプロイ、CI |
 | [12_migration_plan.md](12_migration_plan.md) | 移行の段階表、切り替え方と戻し方、データ移行、計算結果を変えないためのテスト |
+| [13_tasks.md](13_tasks.md) | タスク表、担当エージェント（Haiku / Sonnet / Opus / メイン / ユーザー）、ウェーブ、各タスクに渡すプロンプト |
+
+実装用のエージェントの定義は `.claude/agents/`（`impl-light` / `impl-standard` / `impl-heavy`）にある。
 
 既存の設計書（機能の詳しい仕様）は `document/` 直下にある:
 `arena_design.md` / `running_api.md` / `aws_setup_guide.md` / `gungi_design.md` / `database_design.md`

@@ -3,13 +3,14 @@
 ロリポップ（Apache + PHP）から VPS に移し、API を Rust で作り直すための全体設計。
 現状の調査は README〜05 にある。この文書はそれをもとに **「どう作るか」を決めたもの**。
 
-この設計書は 3 つのファイルに分けてある。
+この設計書は 4 つのファイルに分けてある。
 
 | ファイル | 中身 |
 |---|---|
 | **10_architecture.md**（これ） | 決めたことの一覧、全体の形、方針、API と URL、セッション、Rust の構成、セキュリティ、まだ決まっていないこと、実装プランの分け方 |
 | [11_vps_operations.md](11_vps_operations.md) | VPS の構成、リバースプロキシ、TLS、シークレット、バックアップ、デプロイ、CI |
 | [12_migration_plan.md](12_migration_plan.md) | 移行の段階、切り替え方と戻し方、データ移行、計算結果を変えないためのテスト |
+| [13_tasks.md](13_tasks.md) | タスク表、担当エージェント（モデル）の割り当て、ウェーブ、各タスクに渡すプロンプト |
 
 前提（ユーザーが決めたこと）:
 
@@ -29,22 +30,24 @@
 | D2 | ゲームサーバー起動は残す。**ログイン必須**にし、停止する相手はサーバー側でタグから探す（クライアントが送るインスタンス ID は使わない） | [→](#d2) |
 | D3 | ログインは **Discord だけ**。OTP は作らない。**身内の Discord サーバー（ギルド）のメンバーだけ**がログインできる。ログインした人は全員、ゲームサーバーを起動・停止できる | [→](#d3) |
 | D4 | サイト合言葉は残す。**API でも効かせる**。デバイストークンは localStorage をやめて HttpOnly Cookie にする | [→](#d4) |
-| D5 | DB は **SQLite 1 ファイル**（`app.db`）。新しい DB に入れるのは Discord で紐付いたユーザーだけ。捨てる機能の DB は取り込まず、元のファイルのまま保管する | [→](#d5) |
+| D5 | DB は **SQLite 1 ファイル**（`app.db`）。新しい DB に入れるのは Discord で紐付いたユーザーだけ。捨てる機能の DB は取り込まず、保管もしない | [→](#d5) |
 | D6 | API の URL は **`/api/v1/...` に揃える**。JSON の形は今のまま変えず、変えるのは URL だけ（例外は 3 か所） | [→](#d6) |
 | D7 | セッションは **サーバー側に持つ Cookie セッション**（SQLite に保存、自前で約 150 行）。JWT は使わない | [→](#d7) |
 | D8 | CSRF 対策は **SameSite=Lax の Cookie と Origin ヘッダの確認**の 2 つ | [→](#d8) |
 | D9 | Rust は **axum + tokio + sqlx（SQLite）+ reqwest + aws-sdk**。エラーは thiserror、設定は環境変数 | [→](#d9) |
-| D10 | `server/` は **1 つのクレート・1 つのバイナリ**。サブコマンドで `serve` / `import-legacy` / `hash-password` / `backup` | [→](#d10) |
+| D10 | `server/` は **1 つのクレート・1 つのバイナリ**。サブコマンドで `serve` / `import-legacy` / `hash-password` | [→](#d10) |
 | D11 | ロリポップの制約のための工夫は、捨てる機能と一緒に消えるものが多い。サーバー状態のポーリングと PeerJS の P2P は**そのまま残す** | [→](#d11) |
-| D12 | VPS は **Ubuntu 24.04 + Caddy + systemd**。TLS は Caddy の自動取得 | [11 →](11_vps_operations.md#vps) |
+| D12 | VPS は **AWS Lightsail（東京・512 MB・IPv4 付き）の Ubuntu 24.04 + Caddy + systemd**。TLS は Caddy の自動取得 | [11 →](11_vps_operations.md#vps) |
 | D13 | デプロイは **GitHub Actions でビルド → rsync over SSH → シンボリックリンクの切り替え**。戻すときはリンクを前のリリースに向け直す | [11 →](11_vps_operations.md#deploy) |
-| D14 | バックアップは **毎晩 `app.db` を S3 に送る**（Rust の `backup` サブコマンド + systemd timer） | [11 →](11_vps_operations.md#backup) |
+| D14 | バックアップは **Lightsail の自動スナップショット**（毎日・7 世代）。各段階の切り替えの前には手動でもスナップショットを撮る | [11 →](11_vps_operations.md#backup) |
 | D15 | シークレットは **`/etc/serversystem/env`（root だけが読める）** に置き、systemd の EnvironmentFile で渡す | [11 →](11_vps_operations.md#secrets) |
 | D16 | 移行は 5 段階。①ロリポップで穴を塞ぎ捨てる機能を消す → ②VPS に PHP のまま移す → ③Rust の土台と LoL 戦績 → ④認証・サーバー起動・ランニングをまとめて切り替え → ⑤PHP を消す | [12 →](12_migration_plan.md#stages) |
 | D17 | ④の認証まわりは、**実装は機能ごとに分けるが、切り替えは 1 回で行う**（PHP と Rust でセッションを共有できないため） | [12 →](12_migration_plan.md#why-bundle) |
-| D18 | Arena の Elo・LoL/VAL のポイント・TOTP は、機能を捨てるので **新しいコードでは計算しない**。元の DB ファイルを手を加えずに保管し、ハッシュ値で同じことを確かめる | [12 →](12_migration_plan.md#legacy) |
+| D18 | Arena の Elo・LoL/VAL のポイント・TOTP は、機能を捨てるので **計算もデータも引き継がず、保管もしない** | [12 →](12_migration_plan.md#legacy) |
 | D19 | 移す計算（ランニングの HMAC 署名・LoL の連勝計算・合言葉の bcrypt 照合）は、**固定の入出力（ゴールデンテスト）と本番での PHP との突き合わせ**で同じ結果になることを確かめる | [12 →](12_migration_plan.md#golden) |
 | D20 | 05 に書かれたセキュリティの穴 7 件と、今回の調査で見つけた 5 件を、新しい設計で塞ぐ | [→](#security) |
+| D21 | **新しいドメインを取る**。今の `valol.jellybean.jp`（ロリポップの共有ドメイン）からサイトの URL が変わる。段階 1 で新しい URL に移り、ロリポップからは新しい URL へ転送する | [12 →](12_migration_plan.md#stage1) |
+| D22 | 実装は**難しさに合わせてモデルの違う 3 つのエージェント**（Haiku / Sonnet / Opus）に任せる。つなぎ目・ユーザーとの共同作業・確認とコミットはメインが受け持つ | [13 →](13_tasks.md) |
 
 ---
 
@@ -88,18 +91,16 @@ flowchart LR
     Games[games/*<br/>Pong・軍儀・レース]
   end
 
-  subgraph VPS[VPS Ubuntu 24.04]
+  subgraph VPS[Lightsail 東京 512MB / Ubuntu 24.04]
     Caddy[Caddy<br/>TLS・静的ファイル・振り分け]
     Rust[serversystem<br/>Rust / axum<br/>127.0.0.1:8081]
     DB[(app.db<br/>SQLite)]
-    Timer[systemd timer<br/>毎晩 backup]
   end
 
   subgraph AWS
     EC2[EC2 スポット<br/>Minecraft・Palworld・7DTD]
     RunAPI[API Gateway + Lambda<br/>ランニング]
     Dynamo[(DynamoDB / S3)]
-    S3B[(S3<br/>バックアップ用)]
   end
 
   Discord[Discord<br/>OAuth・Bot]
@@ -118,7 +119,6 @@ flowchart LR
   Rust -->|OAuth| Discord
   Rust --> Riot
   Discord -->|スラッシュコマンド| RunAPI
-  Timer -->|serversystem backup| S3B
 ```
 
 ### 移行の途中（段階 1〜4）
@@ -196,11 +196,11 @@ Caddy が URL の先頭で振り分ける。`/api/v1/*` は Rust、それ以外�
 **決定**
 - `/var/lib/serversystem/app.db` の 1 ファイルにする。テーブルは `users`・`sessions`・`site_passes` の 3 つだけ（[§6.4 のスキーマ](#schema)）。
 - 移行のとき、旧 `auth.db` から **Discord と紐付いているユーザーだけ**を取り込む（`serversystem import-legacy`）。`users.id` は旧 DB の値を引き継ぐ。OTP だけのユーザーと `site_tokens`、`bot_requests` は取り込まない。
-- 捨てる機能の DB（`arena.db`・`lol_predict.db`・`valorant_predict.db`）と旧 `auth.db` は、**取り込まずに元のファイルのまま**、S3 のバックアップ用バケットの `legacy/` に置く。ハッシュ値と行数を記録しておく（[12](12_migration_plan.md#legacy)）。
+- 捨てる機能の DB（`arena.db`・`lol_predict.db`・`valorant_predict.db`）は取り込まず、保管もしない（ユーザーの判断。使わないため）。ロリポップを解約するときに一緒に消える。
 
 **理由**
 - 残るデータはユーザー表くらいしか無い。PostgreSQL にしても利点がなく、DB サーバーの更新・監視・バックアップの手間だけが増える。
-- SQLite なら、バックアップは「ファイルを 1 つ写す」だけで済み、手元に落として `sqlite3` で中身を見られる。
+- SQLite なら、Lightsail のディスクのスナップショットに DB も一緒に入る（WAL モードなので、スナップショットの瞬間の状態からそのまま復旧できる）。手元に落として `sqlite3` で中身を見ることもできる。
 - 1 ファイルにまとめると外部キーが効くので、アカウントを消したときにセッションも一緒に消える（今は DB が分かれていて、他の DB に行が残る）。
 
 <a id="d6"></a>
@@ -337,14 +337,14 @@ Discord のコールバックは GET なので Origin の確認の対象外で�
 | Cookie | `axum-extra`（`cookie` 機能） | axum 用の公式の補助クレート |
 | DB | `sqlx` 0.8（`sqlite`, `runtime-tokio`, `migrate`） | 非同期で使え、マイグレーションをバイナリに埋め込める（`sqlx::migrate!`）。**クエリは実行時に確かめる書き方（`sqlx::query_as::<_, T>()`）にし、コンパイル時に確かめるマクロ（`query!`）は使わない**。マクロを使うとビルドに DB か `.sqlx` ファイルが要り、CI とサブエージェントの手順が増えるため |
 | HTTP クライアント | `reqwest` 0.12（`rustls-tls`, `json`、`default-features = false`） | Discord・Riot・ランニングの AWS を呼ぶ。rustls にして OpenSSL に頼らない（ビルドと配布が楽） |
-| AWS | `aws-config` + `aws-sdk-ec2` + `aws-sdk-s3` | 公式。認証情報は標準の環境変数（`AWS_ACCESS_KEY_ID` など）から自動で読む |
+| AWS | `aws-config` + `aws-sdk-ec2` | 公式。認証情報は標準の環境変数（`AWS_ACCESS_KEY_ID` など）から自動で読む |
+| trait の非同期関数 | `async-trait` | `GameServerBackend` を `Arc<dyn ...>` で差し替えるため（標準の async fn in trait は dyn にできない） |
 | 暗号 | `hmac` + `sha2` + `hex`、`rand`、`bcrypt`、`subtle`（定数時間比較） | RustCrypto の定番 |
 | JSON | `serde` + `serde_json` | |
 | エラー | `thiserror` 2（API 側）、`anyhow`（`main` と CLI だけ） | API はエラーの種類ごとにステータスを決めたいので型を作る。CLI は原因を表示できればよい |
 | ログ | `tracing` + `tracing-subscriber`（標準出力 → journald） | systemd が journald に集めるので、ファイルを扱う必要がない |
 | CLI | `clap` 4（derive） | サブコマンドを作る |
 | 設定 | 環境変数を手書きで読む（`config.rs`）＋ 開発時だけ `dotenvy` で `.env` を読む | 項目が 20 個ほどで、設定を重ねる仕組みは要らない。足りない項目を全部まとめてエラーにする |
-| 圧縮 | `flate2` | バックアップの gzip |
 | テスト | 標準の `#[tokio::test]`、`tower::ServiceExt::oneshot`、`wiremock`（外部 HTTP の代わり）、`tempfile` | 外部 API は、ベース URL を設定で差し替えて wiremock に向ける |
 
 使わないもの:
@@ -393,8 +393,7 @@ server/
 │  │  └─ running_relay.rs    # canonical string の作成・署名・転送
 │  └─ cli/
 │     ├─ import_legacy.rs    # 旧 auth.db から users を取り込む（--dry-run あり）
-│     ├─ hash_password.rs    # 合言葉の bcrypt ハッシュを作る
-│     └─ backup.rs           # VACUUM INTO → gzip → S3
+│     └─ hash_password.rs    # 合言葉の bcrypt ハッシュを作る
 └─ tests/
    ├─ common/mod.rs          # テスト用の AppState（一時 DB、固定の時刻、wiremock）
    ├─ site_gate.rs / auth.rs / servers.rs / lol.rs / running.rs
@@ -470,18 +469,18 @@ CREATE TABLE site_passes (
 | `APP_DATABASE_PATH` | `/var/lib/serversystem/app.db` | |
 | `APP_PUBLIC_ORIGIN` | `https://example.com` | Origin の確認とリダイレクト先 |
 | `APP_COOKIE_SECURE` | `true` | 開発時だけ `false` |
+| `APP_SITE_GATE_ENABLED` | `true` | 合言葉のミドルウェアの ON/OFF。段階 2〜3 の途中までは `false`（[12](12_migration_plan.md#stage3)） |
 | `SITE_PASSWORD_HASH` | `$2y$10$...` | 合言葉の bcrypt ハッシュ |
 | `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | | OAuth |
 | `DISCORD_REDIRECT_URI` | `https://example.com/api/v1/auth/discord/callback` | |
 | `DISCORD_GUILD_ID` | | メンバーかどうかを確かめるギルド |
-| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` | | EC2 とバックアップ（aws-config が自動で読む） |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` | | EC2（aws-config が自動で読む） |
 | `EC2_LT_MINECRAFT` / `EC2_LT_PALWORLD` / `EC2_LT_7DAYS` | `lt-0123...` | 起動テンプレート ID |
 | `RIOT_API_KEY` | | LoL 戦績 |
 | `LOL_MEMBERS` | `名前#JP1,名前2#TAG` | 戦績を出すメンバー（カンマ区切り、`#` の前が名前・後がタグ） |
 | `RUNNING_API_BASE` | `https://xxxx.execute-api.ap-northeast-1.amazonaws.com` | ランニングの API Gateway |
 | `RUNNING_SHARED_SECRET` | | HMAC の共有シークレット（SSM の `/running/proxy-shared-secret` と同じ値） |
 | `RUNNING_TIMEOUT_SECS` | `10` | |
-| `BACKUP_S3_BUCKET` / `BACKUP_S3_PREFIX` | `serversystem-backup` / `app-db/` | |
 | `DISCORD_API_BASE` / `RIOT_ACCOUNT_BASE` / `RIOT_PLATFORM_BASE` | （省略時は本物の URL） | テストで wiremock に向けるため |
 
 ゲームサーバー 3 種の名前・タグ・ポート（`⛏️ Minecraft` / `minecraft` / 25565 など）は秘密ではないので、`services/game_servers.rs` に定数で書く（今の PHP と同じ値）。
@@ -503,6 +502,136 @@ CREATE TABLE site_passes (
 - 起動中ロックは、ロックファイルをやめて**メモリ上**（`Mutex<HashMap<target, 時刻>>`）に持つ。プロセスは 1 つなので足りる。再起動すると消えるが、起動のときに必ず EC2 に問い合わせて重複を確かめるので困らない。「ロックを確かめる → EC2 を確かめる → 起動する」の間は、ターゲットごとの Mutex で 1 つずつしか通さない（同時に 2 回押しても 2 台立たない）。
 - 状態の取得結果は **3 秒キャッシュ**する。複数の人が 5 秒ごとに見ても、AWS への問い合わせは増えない。起動・停止をしたらキャッシュを捨てる。
 - 起動のパラメータ（スポット・one-time・中断時 terminate・`Name` と `GameStatus=Booting` のタグ）は今と同じにする。
+
+---
+
+<a id="seams"></a>
+### 6.7 つなぎ目（モジュールどうしの約束）
+
+ここに書いた型と関数の形は、**土台のタスク（T09）で先に全部作る**。中身は仮のもの（「未実装」の 501 を返す）にしておき、そのあとの各タスクは自分の担当ファイルの中身だけを埋める。
+こうすると、並べて動かすタスクどうしが同じファイル（`state.rs`・`routes/mod.rs`・`Cargo.toml`）を触らずに済む。
+**形を変えたくなったら、担当のエージェントは変えずに報告し、メインが決めてこの節を直してから変える。**
+
+```rust
+// ── clock.rs ───────────────────────────────────────────────
+pub trait Clock: Send + Sync { fn now(&self) -> i64; }        // UNIX 秒
+pub struct SystemClock;
+pub struct FixedClock(pub std::sync::atomic::AtomicI64);     // テスト用。set(t) / advance(secs) を持つ
+
+// ── error.rs ───────────────────────────────────────────────
+pub enum AppError { /* §6.3 のとおり */ }
+pub type AppResult<T> = Result<T, AppError>;
+
+// ── config.rs ──────────────────────────────────────────────
+pub struct Config { /* §6.5 の環境変数を 1 つずつフィールドにする */ }
+impl Config {
+    pub fn from_env() -> anyhow::Result<Config>;              // 足りない項目を全部並べてエラー
+    pub fn for_test() -> Config;                               // テスト用の固定値（外部 URL は空）
+}
+
+// ── state.rs ───────────────────────────────────────────────
+#[derive(Clone)]
+pub struct AppState {
+    pub config: Arc<Config>,
+    pub db: sqlx::SqlitePool,
+    pub http: reqwest::Client,                                 // タイムアウト 10 秒、User-Agent "serversystem"
+    pub clock: Arc<dyn Clock>,
+    pub site_login_limiter: Arc<RateLimiter>,                  // middleware/rate_limit.rs
+    pub game_servers: Arc<GameServerService>,
+    pub lol: Arc<LolStreakService>,
+    pub running: Arc<RunningRelay>,
+    pub discord: Arc<DiscordOAuth>,
+}
+
+// ── auth/token.rs ──────────────────────────────────────────
+pub fn new_token() -> String;                                  // 32 バイトの乱数 → base64url（パディングなし）
+pub fn hash_token(token: &str) -> Vec<u8>;                     // SHA-256（32 バイト）
+
+// ── auth/session.rs ────────────────────────────────────────
+pub const SESSION_COOKIE: &str = "sid";
+pub const SESSION_TTL_SECS: i64 = 30 * 86_400;
+pub const SESSION_TOUCH_INTERVAL_SECS: i64 = 3_600;
+pub struct SessionUser { pub user_id: i64, pub discord_id: String, pub display_name: String }
+pub async fn create_session(db: &SqlitePool, user_id: i64, now: i64) -> AppResult<String>;      // 生のトークンを返す
+pub async fn find_session_user(db: &SqlitePool, token: &str, now: i64) -> AppResult<Option<SessionUser>>; // 期限切れは None。必要なら last_seen_at を更新
+pub async fn delete_session(db: &SqlitePool, token: &str) -> AppResult<()>;
+pub async fn purge_expired_sessions(db: &SqlitePool, now: i64) -> AppResult<u64>;
+pub fn session_cookie(token: &str, config: &Config) -> Cookie<'static>;
+pub fn clear_session_cookie(config: &Config) -> Cookie<'static>;
+pub struct CurrentUser(pub SessionUser);         // FromRequestParts<AppState>。無ければ AppError::LoginRequired
+pub struct MaybeUser(pub Option<SessionUser>);   // FromRequestParts<AppState>。失敗しない
+
+// ── auth/site_pass.rs ──────────────────────────────────────
+pub const SITE_PASS_COOKIE: &str = "site_pass";
+pub const SITE_PASS_TTL_SECS: i64 = 30 * 86_400;
+pub async fn create_site_pass(db: &SqlitePool, device_name: &str, now: i64) -> AppResult<String>;
+pub async fn check_site_pass(db: &SqlitePool, token: &str, now: i64) -> AppResult<bool>;        // 有効なら last_used_at を更新
+pub async fn purge_expired_site_passes(db: &SqlitePool, now: i64) -> AppResult<u64>;
+pub fn site_pass_cookie(token: &str, config: &Config) -> Cookie<'static>;
+pub fn device_name_from_ua(ua: &str) -> &'static str;           // 今の deviceNameFromUA と同じ分け方
+
+// ── middleware ────────────────────────────────────────────
+pub async fn require_site_pass(State(s): State<AppState>, req: Request, next: Next) -> Response; // site_gate.rs。APP_SITE_GATE_ENABLED=false なら素通り
+pub async fn check_origin(State(s): State<AppState>, req: Request, next: Next) -> Response;      // csrf.rs
+pub struct RateLimiter;                                         // rate_limit.rs
+impl RateLimiter {
+    pub fn new(max_failures: u32, window_secs: i64) -> Self;    // 本番は (10, 600)
+    pub fn is_blocked(&self, ip: &str, now: i64) -> bool;
+    pub fn record_failure(&self, ip: &str, now: i64);
+}
+pub fn client_ip(headers: &HeaderMap) -> String;                // X-Forwarded-For の一番右。無ければ "unknown"
+
+// ── auth/discord.rs ────────────────────────────────────────
+pub struct DiscordOAuth { /* client_id, secret, redirect_uri, guild_id, api_base, http */ }
+pub struct DiscordMe { pub id: String, pub username: String, pub global_name: Option<String> }
+impl DiscordOAuth {
+    pub fn authorize_url(&self, state: &str) -> String;         // scope=identify guilds.members.read, prompt=none
+    pub async fn exchange_code(&self, code: &str) -> anyhow::Result<String>;      // アクセストークン
+    pub async fn fetch_me(&self, access_token: &str) -> anyhow::Result<DiscordMe>;
+    pub async fn is_guild_member(&self, access_token: &str) -> anyhow::Result<bool>; // 404 → false
+}
+
+// ── services/game_servers.rs ──────────────────────────────
+#[async_trait] pub trait GameServerBackend: Send + Sync {
+    async fn find_instance(&self, name_tag: &str) -> anyhow::Result<Option<InstanceInfo>>; // 終了済みは除く
+    async fn run_from_template(&self, launch_template_id: &str, name_tag: &str) -> anyhow::Result<()>;
+    async fn terminate(&self, instance_id: &str) -> anyhow::Result<()>;
+}
+pub struct InstanceInfo { pub instance_id: String, pub state: String, pub public_ip: Option<String>, pub game_status: Option<String> }
+pub struct GameServerService { /* backend, 起動テンプレート ID, ロック, キャッシュ */ }
+impl GameServerService {
+    pub fn new(backend: Arc<dyn GameServerBackend>, config: &Config) -> Self;
+    pub async fn status(&self, now: i64) -> AppResult<serde_json::Value>;      // 今の status.php と同じ形
+    pub async fn start(&self, target: &str, now: i64) -> AppResult<String>;    // 成功時の message
+    pub async fn stop(&self, target: &str) -> AppResult<String>;
+}
+
+// ── services/lol_streak.rs ────────────────────────────────
+pub struct LolStreakService { /* http, api_key, members, base URL, 5 分キャッシュ */ }
+impl LolStreakService { pub async fn get(&self, now: i64) -> AppResult<serde_json::Value>; } // 今の streak.php と同じ配列
+
+// ── services/running_relay.rs ─────────────────────────────
+pub fn canonical(method: &str, path: &str, query: &str, discord_id: &str, ts: &str, nonce: &str, body: &[u8]) -> String;
+pub fn sign(canonical: &str, secret: &str) -> String;           // 小文字 hex
+pub struct RunningRelay { /* http, base, secret, timeout */ }
+impl RunningRelay {
+    pub async fn forward(&self, method: &str, upstream_path: &str, raw_query: &str,
+                         discord_id: &str, body: Bytes, now: i64) -> AppResult<(StatusCode, Bytes)>;
+}
+
+// ── lib.rs ────────────────────────────────────────────────
+pub fn build_app(state: AppState) -> axum::Router;              // ミドルウェアとルートを全部つないだもの
+```
+
+テストの補助（`tests/common/mod.rs`、T09 で作る）:
+
+```rust
+pub async fn test_state() -> (AppState, Arc<FixedClock>);       // メモリ上の SQLite、マイグレーション済み、時刻固定
+pub async fn create_user(state: &AppState, discord_id: &str, name: &str) -> i64;
+pub async fn login_cookie(state: &AppState, user_id: i64) -> String;      // "sid=..." を返す
+pub async fn site_pass_cookie(state: &AppState) -> String;                 // "site_pass=..." を返す
+pub fn json_request(method: &str, uri: &str, cookies: &[&str], body: Option<serde_json::Value>) -> Request<Body>; // Origin を自動で付ける
+```
 
 ---
 
@@ -540,7 +669,7 @@ CREATE TABLE site_passes (
 | 2 | サイト合言葉が API で効いていない | すべての `/api/v1/*` に合言葉のミドルウェアをかける（D4） | 段階 3 |
 | 3 | OTP シークレットを外部の QR サービスに渡している | OTP をやめる（D3）。登録画面ごと消す | 段階 3（それまでは新規登録を止めてもよい） |
 | 4 | VALORANT の結果確定が誰でもできる | 機能ごと消す | 段階 0 |
-| 5 | AWS の長期アクセスキーを PHP が持っている | VPS は AWS の外なので、インスタンスのロールは使えない。かわりに**専用の IAM ユーザーに最小限の権限**（3 つの起動テンプレートからの起動と、3 つのタグが付いたインスタンスの終了、バックアップの書き込みだけ）を渡す。キーは root だけが読めるファイルに置く。古いキーは段階 4 で消す（[11 の IAM](11_vps_operations.md#iam)） | 段階 3（Rust 用のキー）・段階 4（古いキーを消す） |
+| 5 | AWS の長期アクセスキーを PHP が持っている | Lightsail のインスタンスには EC2 のような IAM ロールを付けられない。かわりに**専用の IAM ユーザーに最小限の権限**（3 つの起動テンプレートからの起動と、3 つのタグが付いたインスタンスの終了だけ）を渡す。キーは root だけが読めるファイルに置く。古いキーは段階 4 で消す（[11 の IAM](11_vps_operations.md#iam)） | 段階 3（Rust 用のキー）・段階 4（古いキーを消す） |
 | 6 | Arena の初代管理者を誰でも取れる | 機能ごと消す。管理者という概念を持たない | 段階 0 |
 | 7 | 状態を変える API に CSRF 対策が無い | SameSite=Lax と Origin の確認（D8） | 段階 3 |
 
@@ -569,40 +698,24 @@ CREATE TABLE site_passes (
 
 | 項目 | 今の考え | 決める人・時期 |
 |---|---|---|
-| VPS の業者とプラン | 国内リージョンで、1 vCPU・メモリ 1〜2 GB・SSD 20 GB 以上・Ubuntu 24.04 が選べるもの。スナップショットが安く使えるとなおよい | ユーザー・段階 1 の前 |
-| ドメインと DNS の管理場所 | 今のドメインを使い続ける前提。DNS をどこで管理しているか（ロリポップのまま／ムームードメインなど）を確かめ、段階 1 の前に TTL を 300 秒に下げる | ユーザー・段階 1 の前 |
-| ロリポップのプラン（ライトかエコノミーか） | 解約の時期にだけ関係する。段階 4 が終わって 2 週間たったら解約 | ユーザー |
-| Riot API のキー | 開発用のキーは 24 時間で切れる。本番用のキー（Personal API Key）を取っているか確かめる。取っていなければ、LoL 戦績はキーの更新を手でやる前提になる | ユーザー・段階 2 の前 |
-| PeerJS の公開サーバーに頼り続けるか | 当面はこのまま。公開サーバーが不安定になったら、VPS に PeerServer（Node 製）を立てるか、Rust で同じ仲介を作るかを考える | 必要になったとき |
+| ドメイン名 | 新しく取る（D21）。一番手間が少ないのは、**Route 53 で取り、そのまま Route 53 のホストゾーンで A レコードを管理する**方法（AWS の中で完結し、Lightsail の静的 IP に向けるだけで済む）。ほかの業者で取り、DNS を Lightsail の DNS ゾーン（無料）に任せてもよい | ユーザー・段階 1 の前（T04） |
 | `/games/*` にも合言葉をかけるか | 今はかけない（静的ファイルだけで、データも無い）。かけるなら Caddy の `forward_auth` で `/api/v1/site/status` を使えば、ゲーム側を直さずに済む | ユーザー（いつでも） |
+| PeerJS の公開サーバーに頼り続けるか | 当面はこのまま。公開サーバーが不安定になったら、VPS に PeerServer（Node 製）を立てるか、Rust で同じ仲介を作るかを考える。512 MB の Lightsail に載せるなら Rust のほうが軽い | 必要になったとき |
 | CSP（Content-Security-Policy） | ゲームが unpkg から読み込んでいるので、許可するリストを作ってからにする | あとで |
-| 死活監視 | 最初は無し。必要なら外部の無料の死活監視サービスで `/api/v1/health` を見る | あとで |
+| 死活監視 | 最初は無し。必要なら Lightsail のメトリクスのアラーム（CPU・ステータスチェック）か、外部の無料の死活監視サービスで `/api/v1/health` を見る | あとで |
 | セッションの期間（30 日） | ギルドを抜けた人を早く締め出したいなら短くする | ユーザー（いつでも、定数 1 つ） |
-| ランニングを VPS に持ってくるか | 今回はしない（D1）。AWS の費用や運用が気になったら考える | あとで |
+| ランニングを VPS に持ってくるか | 今回はしない（D1）。512 MB では Bot まで載せる余裕も小さい | あとで |
 | ゲームサーバー側のセットアップスクリプト | このリポジトリに入っていない（EC2 の起動テンプレートの中）。今回の範囲外 | — |
+
+前の版で「まだ決まっていない」としていたもののうち、決まったもの:
+- VPS は AWS Lightsail の 512 MB プラン（D12）。
+- Riot API のキーは持っている。LoL 戦績は今と同じキーで動かす。
+- Elo・予想のポイント・TOTP のデータは残さない（D18）。
 
 ---
 
 <a id="plans"></a>
-## 10. 実装プランに分けるときの単位の案
+## 10. 実装の進め方
 
-1 つのプランは、Sonnet のサブエージェントが 1 回で終えられ、終わったら `cargo test`（またはフロントのビルド）が通ってコミットできる大きさにする。
-
-| ID | プラン | 中身 | 前に終わっている必要があるもの | 大きさ | 段階 |
-|---|---|---|---|---|---|
-| P0 | PHP の応急処置 | `api/server/*.php` に `requireAuth()` を足す。停止は送られた `instanceId` を使わず、タグで探した ID にする。`ServerControl` を未ログインならログインへ | — | 小 | 0 |
-| P1 | 捨てる機能を消す | フロントのページ・メニュー・ゲーム 2 本、`api/arena`・`api/lol/predict.php`・`champion-bot.php`・`api/valorant`・`api/debug`・`api/ai_config.php*` を消す。消す前に本番の DB ファイルを保管する（手順は 12） | — | 小〜中 | 0 |
-| P2 | VPS の構築手順とファイル | `deploy/` に Caddyfile・systemd のユニット・`activate` スクリプト・構築手順書（`deploy/README.md`）。PHP-FPM の設定を含む。**手作業の部分（VPS の契約・DNS）はユーザーがやる** | P1 | 中 | 1 |
-| P3 | デプロイの自動化 | GitHub Actions の `deploy.yml` を rsync over SSH に書き換える（この時点では PHP + dist + games）。CI の手直し | P2 | 小〜中 | 1 |
-| P4 | Rust の土台 | `server/` のクレート、`config`・`error`・`state`・`clock`・`db`・マイグレーション、`/api/v1/health`、CSRF と合言葉のミドルウェア（合言葉は設定で ON/OFF できるようにし、最初は OFF）、**セッションの土台（`auth/token.rs`・`auth/session.rs` と `CurrentUser`、テスト用にセッションを作る補助）**、CI の `server` ジョブ、デプロイにバイナリを足す | P3 | 中〜大 | 2 |
-| P5 | LoL 戦績 | `services/lol_streak.rs` と `routes/lol.rs`、ゴールデンテスト、フロントの URL 変更 | P4 | 中 | 2 |
-| P6 | 合言葉と Discord ログイン | `site_pass`・回数制限・`/site/*`・`/auth/*`・`DELETE /me`・ギルドの確認・`import-legacy`・`hash-password` | P4 | 大 | 3 |
-| P7 | ゲームサーバー | `GameServerBackend`・`Ec2Backend`・判定の表（§6.6）・ロック・キャッシュ・`/servers*`、IAM ポリシーの JSON（`deploy/iam/`） | P4 | 中 | 3 |
-| P8 | ランニングの中継 | `services/running_relay.rs`・`routes/running.rs`・HMAC のゴールデンテスト | P4 | 小〜中 | 3 |
-| P9 | フロントの切り替え | 表「フロントの変更範囲」の段階 3 の行すべて。合言葉のミドルウェアを ON にする設定 | P6, P7, P8 | 中 | 3 |
-| P10 | バックアップ | `cli/backup.rs`・systemd timer・S3 のライフサイクル設定の手順・復元の手順 | P4 | 小〜中 | 3（段階 3 の前に動かしておく） |
-| P11 | PHP の撤去 | `api/`・`lib/`・`config.php*`・`generate_hash.php`・`.htaccess`・PHP の CI ジョブ・Caddy の PHP の行を消す。README と設計書を直す。VPS から PHP-FPM を外す手順 | 段階 3 が 2 週間問題なく動いたあと | 小〜中 | 4 |
-
-- **並べて進められるもの**: P0 と P1。P6・P7・P8（どれも P4 のセッションの土台に頼るだけで、触るファイルが重ならない）。P5 と P10。
-- P6〜P8 は、フロントが新しい URL を呼ぶまで使われない（本番に出ていても眠っている）。だから**それぞれ出来た時点で main にマージしてデプロイしてよい**。本番で curl を使って先に確かめられる（12 の段階 3 を参照）。長く残す別ブランチは要らない。
-- P2 と P11 は、VPS の上での手作業を含む。手順書と設定ファイルまではサブエージェントが作り、実際に流すのはユーザーと一緒にやる。
+タスク表、担当エージェントとモデルの割り当て、ウェーブ、各タスクに渡すプロンプトは [13_tasks.md](13_tasks.md) にまとめた。
+エージェントの定義は `.claude/agents/` にある（`impl-light`＝Haiku、`impl-standard`＝Sonnet、`impl-heavy`＝Opus）。
