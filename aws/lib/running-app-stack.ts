@@ -1,4 +1,5 @@
 import * as path from 'path';
+import { readSiteOrigins } from './site-origins';
 import { Stack, StackProps, Duration, CfnOutput, RemovalPolicy } from 'aws-cdk-lib';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
@@ -36,7 +37,8 @@ export class RunningAppStack extends Stack {
     const discordPublicKey = this.node.tryGetContext('discordPublicKey') ?? '';
     const discordGuildId = this.node.tryGetContext('discordGuildId') ?? '';
     // `/run web` が案内する Web版のベースURL。cdk.json の context から読む（未設定なら空文字）。
-    const siteOrigin = this.node.tryGetContext('siteOrigin') ?? '';
+    // 複数オリジンのうち先頭を案内先にする。
+    const siteOrigin = readSiteOrigins(this.node)[0] ?? '';
 
     // Bot Token（DISCORD_BOT_TOKEN）はここには絶対に含めない。
     // Lambda の環境変数は `lambda:GetFunctionConfiguration` 権限さえあれば平文で読み出せてしまうため、
