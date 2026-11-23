@@ -1,0 +1,2 @@
+# deploy ユーザーが sudo で使えるのは、この 2 つのコマンドだけ
+deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart serversystem, /usr/bin/systemctl reload caddy
