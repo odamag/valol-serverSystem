@@ -2,6 +2,9 @@
 session_start();
 require_once dirname(__DIR__) . '/common.php';
 
+// 未ログインで AWS を操作できないようにする
+requireAuth();
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     jsonResponse(['success' => false, 'message' => 'Method not allowed'], 405);
 }
@@ -22,22 +25,11 @@ $servers = [
         'lt_id' => $creds['MINECRAFT_LT_ID'],
         'tag'   => 'minecraft',
     ],
-    'palworld' => [
-        'name'  => '🐼 Palworld',
-        'lt_id' => $creds['PALLWORLD_LT_ID'],
-        'tag'   => 'palworld',
-    ],
-    '7days' => [
-        'name'  => '🧟 7 Days to Die',
-        'lt_id' => $creds['SEVENDAYS_LT_ID'],
-        'tag'   => '7days',
-    ],
 ];
 
 $data       = json_decode(file_get_contents('php://input'), true);
 $action     = $data['action']     ?? '';
 $target     = $data['target']     ?? '';
-$instanceId = $data['instanceId'] ?? '';
 
 if (!isset($servers[$target])) {
     jsonResponse(['success' => false, 'message' => '不明なターゲット']);
@@ -100,10 +92,18 @@ if ($action === 'start') {
 }
 
 if ($action === 'stop') {
-    if (empty($instanceId)) {
-        jsonResponse(['success' => false, 'message' => 'instance_id が必要です']);
-    }
+    // クライアントから渡された instanceId は使わない（他人のインスタンスを止められないよう、タグで探す）
     try {
+        $found = $ec2->describeInstances([
+            'Filters' => [
+                ['Name' => 'tag:Name', 'Values' => [$conf['tag']]],
+                ['Name' => 'instance-state-name', 'Values' => ['pending', 'running', 'shutting-down', 'stopping']],
+            ],
+        ]);
+        $instanceId = $found['Reservations'][0]['Instances'][0]['InstanceId'] ?? '';
+        if ($instanceId === '') {
+            jsonResponse(['success' => false, 'message' => '⚠️ 停止するサーバーが見つかりません']);
+        }
         $ec2->terminateInstances(['InstanceIds' => [$instanceId]]);
         @unlink($lockFile);
         jsonResponse(['success' => true, 'message' => '停止リクエストを送信しました']);

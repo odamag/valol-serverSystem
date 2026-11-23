@@ -2,6 +2,9 @@
 session_start();
 require_once dirname(__DIR__) . '/common.php';
 
+// 未ログインで AWS の状態を見せない
+requireAuth();
+
 $root  = dirname(dirname(__DIR__));
 $creds = include($root . '/config.php');
 
@@ -17,16 +20,6 @@ $servers = [
         'name' => '⛏️ Minecraft',
         'tag'  => 'minecraft',
         'port' => 25565,
-    ],
-    'palworld' => [
-        'name' => '🐼 Palworld',
-        'tag'  => 'palworld',
-        'port' => 8211,
-    ],
-    '7days' => [
-        'name' => '🧟 7 Days to Die',
-        'tag'  => '7days',
-        'port' => 26900,
     ],
 ];
 
