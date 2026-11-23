@@ -1,23 +1,9 @@
 const games = [
   {
-    href: '/games/minigame/',
-    icon: '⚔️',
-    title: 'Auto Battle RPG',
-    description: '眺めて楽しむオートバトルRPG。キャラクターが自動で戦います。',
-    tag: 'シングルプレイ',
-  },
-  {
     href: '/games/pong/',
     icon: '🏓',
     title: 'Pong (P2P)',
     description: '友達とP2P接続してリアルタイムで対戦するポンゲーム。',
-    tag: '2プレイヤー',
-  },
-  {
-    href: '/games/linegame/',
-    icon: '🎯',
-    title: 'ライン通過ゲーム',
-    description: '障害物を避けながらラインを通過するアクションゲーム。',
     tag: '2プレイヤー',
   },
   {

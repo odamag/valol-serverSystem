@@ -9,16 +9,7 @@ import ServerControl from './pages/ServerControl.jsx'
 import MiniGames from './pages/MiniGames.jsx'
 import Profile from './pages/Profile.jsx'
 import Info from './pages/Info.jsx'
-import LoLInfo from './pages/LoLInfo.jsx'
 import LoLStreak from './pages/LoLStreak.jsx'
-import LoLPredict from './pages/LoLPredict.jsx'
-import ValorantPredict from './pages/ValorantPredict.jsx'
-import ArenaHome from './pages/ArenaHome.jsx'
-import ArenaMyGames from './pages/ArenaMyGames.jsx'
-import ArenaAdmin from './pages/ArenaAdmin.jsx'
-import ArenaSeries from './pages/ArenaSeries.jsx'
-import ArenaRanking from './pages/ArenaRanking.jsx'
-import ArenaHeadToHead from './pages/ArenaHeadToHead.jsx'
 import RunningHome from './pages/RunningHome.jsx'
 import RunningRanking from './pages/RunningRanking.jsx'
 import RunningRecords from './pages/RunningRecords.jsx'
@@ -86,37 +77,10 @@ function App() {
               <Route path="server" element={<ServerControl />} />
               <Route path="games" element={<MiniGames />} />
               <Route path="info" element={<Info />} />
-              <Route path="lol" element={<LoLInfo />} />
               <Route path="lol-streak" element={<LoLStreak />} />
-              <Route path="lol-predict" element={<LoLPredict />} />
-              <Route path="val-predict" element={<ValorantPredict />} />
               <Route
                 path="profile"
                 element={auth.loggedIn ? <Profile /> : <Navigate to="/login" replace />}
-              />
-              <Route
-                path="arena"
-                element={auth.loggedIn ? <ArenaHome /> : <Navigate to="/login" replace />}
-              />
-              <Route
-                path="arena/my-games"
-                element={auth.loggedIn ? <ArenaMyGames /> : <Navigate to="/login" replace />}
-              />
-              <Route
-                path="arena/admin"
-                element={auth.loggedIn ? <ArenaAdmin /> : <Navigate to="/login" replace />}
-              />
-              <Route
-                path="arena/ranking"
-                element={auth.loggedIn ? <ArenaRanking /> : <Navigate to="/login" replace />}
-              />
-              <Route
-                path="arena/head-to-head"
-                element={auth.loggedIn ? <ArenaHeadToHead /> : <Navigate to="/login" replace />}
-              />
-              <Route
-                path="arena/:publicId"
-                element={auth.loggedIn ? <ArenaSeries /> : <Navigate to="/login" replace />}
               />
               <Route
                 path="running"
