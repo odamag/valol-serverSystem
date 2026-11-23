@@ -13,7 +13,7 @@ use crate::auth::discord::DiscordOAuth;
 use crate::clock::{Clock, SystemClock};
 use crate::config::Config;
 use crate::middleware::rate_limit::RateLimiter;
-use crate::services::game_servers::{GameServerBackend, GameServerService, UnconfiguredBackend};
+use crate::services::game_servers::{Ec2Backend, GameServerBackend, GameServerService};
 use crate::services::lol_streak::LolStreakService;
 use crate::services::running_relay::RunningRelay;
 
@@ -69,8 +69,7 @@ impl AppState {
 
     /// 本番用（`serve` から呼ぶ）。OS の時計と、本物の EC2 を使う。
     pub async fn for_production(config: Config, db: SqlitePool) -> anyhow::Result<AppState> {
-        // T14: 次の 1 行を `Arc::new(Ec2Backend::new(&config).await?)` などに替える
-        let game_backend: Arc<dyn GameServerBackend> = Arc::new(UnconfiguredBackend);
+        let game_backend: Arc<dyn GameServerBackend> = Arc::new(Ec2Backend::new(&config).await?);
         Self::new(config, db, Arc::new(SystemClock), game_backend)
     }
 }
