@@ -17,7 +17,8 @@
 	}
 
 	# PHP（移行中だけ。段階 4 でこのブロックを消す）
-	@php_private path /api/*config.php /api/*/lib/* /api/common.php
+	# * が先頭か末尾にあるときは / をまたいで一致する（真ん中の * は / をまたがないので使わない）
+	@php_private path *config.php */lib/* /api/common.php
 	handle @php_private {
 		respond 404
 	}

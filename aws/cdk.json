@@ -75,7 +75,7 @@
     "@aws-cdk/aws-ec2:securityGroupDisableInlineRules": false,
     "@aws-cdk/aws-stepfunctions-tasks:useNewS3UriParametersForBedrockInvokeModelTask": true,
 
-    "siteOrigins": ["https://valol.jellybean.jp"],
+    "siteOrigins": ["https://valolbeta.com", "https://valol.jellybean.jp"],
     "siteOrigin": "https://valol.jellybean.jp",
     "discordAppId": "1547229953106513940",
     "discordPublicKey": "8de36f6fa5d1bda0af3363d6df6c48270e395b3097b6ae2d2fe3a584b7a7d835",
