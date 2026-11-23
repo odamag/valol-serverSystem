@@ -604,12 +604,36 @@ npx cdk deploy RunningGithubOidc --profile running
 
 ### CloudWatch Logs でログを見る
 
-- コンソール: CloudWatch → 左メニュー「ロググループ」→ `/aws/lambda/<関数名>` →
-  最新のログストリームを開く。
-- CLI（Git Bash 推奨）:
+> **ロググループは `/aws/lambda/` 配下に無い。** 保持期間の設定だけのためにカスタムリソース
+> Lambda を増やしたくなかったので、CDK で `LogGroup` を明示的に作っている。その結果、名前は
+> `RunningApp-ApiFnLogsADB874AE-sMqtF8oCgC1M` のような CDK 生成名になる
+> （`/aws/lambda/RunningApp-ApiFn...` ではない）。
+
+まずロググループ名を一覧する。
+
+```bash
+aws logs describe-log-groups --profile running --region ap-northeast-1   --query "logGroups[?starts_with(logGroupName,'RunningApp')].logGroupName" --output text
+```
+
+名前の中ほどにどの関数のログかが入っている。
+
+| 名前に含まれる文字列 | どの関数のログか |
+|---|---|
+| `InteractionsFnLogs` | Discord からの受け口。署名検証の失敗、autocomplete の不具合はここ |
+| `WorkerFnLogs` | スラッシュコマンドの実処理。`/run add` が失敗する、ロール付与が403になる等はここ |
+| `ApiFnLogs` | Web からの API。`/running` が動かない、HMAC が通らない等はここ |
+| `SchedulerFnLogs` | 月初の定期実行。月間1位ロールの入れ替えの失敗はここ |
+
+- CLI で追う（Git Bash 推奨）:
   ```bash
-  aws logs tail /aws/lambda/<関数名> --follow --profile running
+  aws logs tail <上で調べたロググループ名> --follow --profile running --region ap-northeast-1
   ```
+- コンソール: CloudWatch → 左メニュー「ロググループ」→ `RunningApp` で絞り込み →
+  最新のログストリームを開く。
+
+> Lambda の関数名も CDK の自動生成（例: `RunningApp-ApiFnE0725F78-tZdjB3aKvn6m`）で読みにくいが、
+> 各関数には `[ランニング] ...` で始まる説明文を付けてあるので、コンソールの関数一覧では
+> 説明文で見分けられる。
 
 ### DynamoDB のアイテムを直接確認する
 
