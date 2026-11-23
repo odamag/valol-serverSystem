@@ -148,7 +148,7 @@ jobs:
           set -euo pipefail
           # --delete は付けない(新しい空のディレクトリへ送るだけなので不要)
           rsync -a --no-owner --no-group \
-            -e "ssh -F ~/.ssh/config -o HostName=$VPS_HOST" \
+            -e "ssh -F $HOME/.ssh/config -o HostName=$VPS_HOST" \
             release/ "vps:$DEPLOY_ROOT/releases/$RELEASE_ID/"
 
       - name: Activate
