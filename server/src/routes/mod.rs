@@ -105,15 +105,6 @@ pub fn router(state: AppState) -> Router {
     routes.layer(middleware).with_state(state)
 }
 
-/// 【仮】のハンドラが返す応答（T10〜T16 が中身を作るまで）
-pub(crate) fn not_implemented() -> Response {
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        Json(json!({ "success": false, "message": "未実装です" })),
-    )
-        .into_response()
-}
-
 async fn not_found() -> AppError {
     AppError::NotFound
 }

@@ -1,0 +1,67 @@
+[
+  {
+    "name": "get_no_query",
+    "method": "GET",
+    "path": "/v1/settings",
+    "query": "",
+    "ts": "1767225600",
+    "nonce": "00112233445566778899aabbccddeeff",
+    "body": "",
+    "discordId": "123456789012345678",
+    "secret": "dummy-shared-secret-for-tests",
+    "canonical": "GET\n/v1/settings\n\n123456789012345678\n1767225600\n00112233445566778899aabbccddeeff\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "signature": "0c20115462da6a25904debdede78ddf03bbfa4d634186d3277104f82e939bab8"
+  },
+  {
+    "name": "get_with_query",
+    "method": "GET",
+    "path": "/v1/records",
+    "query": "limit=20&cursor=eyJwayI6IkEjMSJ9",
+    "ts": "1767225601",
+    "nonce": "ffeeddccbbaa99887766554433221100",
+    "body": "",
+    "discordId": "123456789012345678",
+    "secret": "dummy-shared-secret-for-tests",
+    "canonical": "GET\n/v1/records\nlimit=20&cursor=eyJwayI6IkEjMSJ9\n123456789012345678\n1767225601\nffeeddccbbaa99887766554433221100\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "signature": "01bcaa206d9770781b44f5a77820978726aef96ae1ac959ca91aea8f90c9052c"
+  },
+  {
+    "name": "post_japanese_body",
+    "method": "POST",
+    "path": "/v1/records",
+    "query": "",
+    "ts": "1767225602",
+    "nonce": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+    "body": "{\"distanceKm\":5.2,\"memo\":\"朝ラン、気持ちよかった🏃\"}",
+    "discordId": "123456789012345678",
+    "secret": "dummy-shared-secret-for-tests",
+    "canonical": "POST\n/v1/records\n\n123456789012345678\n1767225602\na0a1a2a3a4a5a6a7a8a9aaabacadaeaf\n23ce536d24b2aab48ef677513f351f7ff62f02a61959e8d947387329a5c6c717",
+    "signature": "33cb150a796027c9b2c142f5dc12933e59f42dd85843c7ea128e397a2ff757f8"
+  },
+  {
+    "name": "patch_record",
+    "method": "PATCH",
+    "path": "/v1/records/2026-03-05_0123456789abcdef0123456789abcdef",
+    "query": "",
+    "ts": "1767225603",
+    "nonce": "b0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+    "body": "{\"memo\":\"更新\",\"updatedAt\":\"2026-03-05T06:00:00.000Z\"}",
+    "discordId": "123456789012345678",
+    "secret": "dummy-shared-secret-for-tests",
+    "canonical": "PATCH\n/v1/records/2026-03-05_0123456789abcdef0123456789abcdef\n\n123456789012345678\n1767225603\nb0b1b2b3b4b5b6b7b8b9babbbcbdbebf\n90c14fc91fbaf4c1581094db8c3f47126209c55ed3cfa8ada48c20ffd3c123bb",
+    "signature": "ab317cd7e987d1d6ee08c6b09203e0590b2d889d268cad32b6cbba0478e2315b"
+  },
+  {
+    "name": "delete_with_query",
+    "method": "DELETE",
+    "path": "/v1/records/2026-03-05_0123456789abcdef0123456789abcdef",
+    "query": "updatedAt=2026-03-05T06%3A00%3A00.000Z",
+    "ts": "1767225604",
+    "nonce": "c0c1c2c3c4c5c6c7c8c9cacbcccdcecf",
+    "body": "",
+    "discordId": "123456789012345678",
+    "secret": "dummy-shared-secret-for-tests",
+    "canonical": "DELETE\n/v1/records/2026-03-05_0123456789abcdef0123456789abcdef\nupdatedAt=2026-03-05T06%3A00%3A00.000Z\n123456789012345678\n1767225604\nc0c1c2c3c4c5c6c7c8c9cacbcccdcecf\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "signature": "3c97ea2af6916ba9a415e1ed342829adb7d21d1d5fbb9934251a0ff095f923fb"
+  }
+]
