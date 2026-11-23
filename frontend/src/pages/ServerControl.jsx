@@ -115,7 +115,7 @@ export default function ServerControl() {
   }, [])
 
   useEffect(() => {
-    // 未ログイン（401）のあいだは、無駄な問い合わせをしないよう止める
+    // 合言葉の確認が切れている（401）あいだは、無駄な問い合わせをしないよう止める
     if (unauthorized) return undefined
     fetchStatus()
     const interval = setInterval(fetchStatus, 5000)
@@ -158,12 +158,10 @@ export default function ServerControl() {
 
       {unauthorized ? (
         <div className="message-banner">
-          サーバーの操作にはログインが必要です。{' '}
-          <a
-            href="/login?next=/server"
-            onClick={() => sessionStorage.setItem('postLoginRedirect', '/server')}
-          >
-            ログイン画面へ
+          合言葉の確認が切れました。{' '}
+          {/* 読み直すと SiteGate が合言葉の入力欄を出す */}
+          <a href="/server" onClick={(e) => { e.preventDefault(); window.location.reload() }}>
+            ページを読み直す
           </a>
         </div>
       ) : null}

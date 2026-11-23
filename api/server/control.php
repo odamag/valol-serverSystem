@@ -2,8 +2,8 @@
 session_start();
 require_once dirname(__DIR__) . '/common.php';
 
-// 未ログインで AWS を操作できないようにする
-requireAuth();
+// 合言葉を通っていない人には AWS を操作させない（ログインは要らない。設計 10 の D2）
+requireSiteAuth();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     jsonResponse(['success' => false, 'message' => 'Method not allowed'], 405);

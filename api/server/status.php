@@ -2,8 +2,8 @@
 session_start();
 require_once dirname(__DIR__) . '/common.php';
 
-// 未ログインで AWS の状態を見せない
-requireAuth();
+// 合言葉を通っていない人には AWS の状態を見せない（ログインは要らない。設計 10 の D2）
+requireSiteAuth();
 
 $root  = dirname(dirname(__DIR__));
 $creds = include($root . '/config.php');
