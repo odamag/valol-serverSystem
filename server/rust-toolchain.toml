@@ -1,0 +1,4 @@
+# ツールチェーンを固定する（CI と手元で clippy の警告が食い違わないようにするため）
+[toolchain]
+channel = "1.100"
+components = ["rustfmt", "clippy"]

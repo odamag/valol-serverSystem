@@ -336,10 +336,10 @@ Discord のコールバックは GET なので Origin の確認の対象外で�
 | 用途 | 使うもの | 理由 |
 |---|---|---|
 | 非同期ランタイム | `tokio` 1 | 事実上の標準。axum・reqwest・aws-sdk・sqlx がすべてこれを前提にしている |
-| Web フレームワーク | `axum` 0.8 + `tower-http` 0.6（trace, timeout, limit） | tokio と同じ開発元で、ミドルウェアを tower で組める。情報が多く、サブエージェントが迷いにくい |
+| Web フレームワーク | `axum` 0.8 + `tower-http` 0.7（trace, timeout, limit） | tokio と同じ開発元で、ミドルウェアを tower で組める。情報が多く、サブエージェントが迷いにくい |
 | Cookie | `axum-extra`（`cookie` 機能） | axum 用の公式の補助クレート |
-| DB | `sqlx` 0.8（`sqlite`, `runtime-tokio`, `migrate`） | 非同期で使え、マイグレーションをバイナリに埋め込める（`sqlx::migrate!`）。**クエリは実行時に確かめる書き方（`sqlx::query_as::<_, T>()`）にし、コンパイル時に確かめるマクロ（`query!`）は使わない**。マクロを使うとビルドに DB か `.sqlx` ファイルが要り、CI とサブエージェントの手順が増えるため |
-| HTTP クライアント | `reqwest` 0.12（`rustls-tls`, `json`、`default-features = false`） | Discord・Riot・ランニングの AWS を呼ぶ。rustls にして OpenSSL に頼らない（ビルドと配布が楽） |
+| DB | `sqlx` 0.9（`sqlite`, `runtime-tokio`, `migrate`） | 非同期で使え、マイグレーションをバイナリに埋め込める（`sqlx::migrate!`）。**クエリは実行時に確かめる書き方（`sqlx::query_as::<_, T>()`）にし、コンパイル時に確かめるマクロ（`query!`）は使わない**。マクロを使うとビルドに DB か `.sqlx` ファイルが要り、CI とサブエージェントの手順が増えるため |
+| HTTP クライアント | `reqwest` 0.13（`rustls`, `json`, `form`, `query`、`default-features = false`） | Discord・Riot・ランニングの AWS を呼ぶ。rustls にして OpenSSL に頼らない（ビルドと配布が楽） |
 | AWS | `aws-config` + `aws-sdk-ec2` | 公式。認証情報は標準の環境変数（`AWS_ACCESS_KEY_ID` など）から自動で読む |
 | trait の非同期関数 | `async-trait` | `GameServerBackend` を `Arc<dyn ...>` で差し替えるため（標準の async fn in trait は dyn にできない） |
 | 暗号 | `hmac` + `sha2` + `hex`、`rand`、`bcrypt`、`subtle`（定数時間比較） | RustCrypto の定番 |

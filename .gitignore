@@ -25,6 +25,10 @@ frontend/node_modules/
 # VPS の本物の設定（ひな形は deploy/env.example）
 deploy/env
 
+# Rust（server/）のビルド成果物と開発用の設定
+server/target/
+server/.env
+
 # ロックファイル
 starting_*.lock
 
