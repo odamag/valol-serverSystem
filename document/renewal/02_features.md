@@ -7,22 +7,22 @@
 
 | # | 機能 | 画面 | API | 外部依存 | 必要なログイン | 判断 |
 |---|---|---|---|---|---|---|
-| 1 | サイト合言葉（SiteGate） | 全画面の前 | `api/auth/site_*.php` | なし | — | |
-| 2 | OTP ログイン・新規登録 | `/login` `/register` | `api/auth/login.php` `register.php` | api.qrserver.com | — | |
-| 3 | Discord ログイン | `/login` | `api/auth/discord_*.php` | Discord OAuth | — | |
-| 4 | プロフィール（アカウント削除） | `/profile` | `api/auth/profile.php` | なし | 要 | |
-| 5 | ゲームサーバー起動／停止 | `/server` | `api/server/*.php` | AWS EC2 | **なし（穴）** | |
-| 6 | ミニゲーム集 | `/games` → `/games/*` | なし | PeerJS, CDN | 不要 | |
-| 7 | 情報リンク | `/info` | なし | Notion へのリンク 1 件 | 不要 | |
-| 8 | LoL チャンピオン情報 | `/lol` | なし（ブラウザ → Data Dragon） | Data Dragon | 不要 | |
-| 9 | LoL チャンピオン AI 質問 | `/lol` のモーダル | `api/lol/champion-bot.php` | Anthropic API | 要 | |
-| 10 | LoL 戦績（連勝・ランク） | `/lol-streak` | `api/lol/streak.php` | Riot API | 不要 | |
-| 11 | LoL 試合予想 | `/lol-predict` | `api/lol/predict.php` | LoL Esports API | 投票は要 | |
-| 12 | VALORANT 試合予想 | `/val-predict` | `api/valorant/predict.php` | PandaScore | 投票・手動登録は要 | |
-| 13 | バンピック & ランキング（Arena） | `/arena/*` | `api/arena/` | なし | 要 | |
-| 14 | ランニング記録（Web） | `/running/*` | `api/running/` → AWS | AWS | 要（Discord ログイン限定） | |
-| 15 | ランニング記録（Discord Bot） | Discord | AWS のみ | Discord, AWS | Discord | |
-| 16 | API 疎通確認（デバッグ） | なし | `api/debug/api_check.php` | LoL Esports, PandaScore | 要 | |
+| 1 | サイト合言葉（SiteGate） | 全画面の前 | `api/auth/site_*.php` | なし | — | 残す |
+| 2 | OTP ログイン・新規登録 | `/login` `/register` | `api/auth/login.php` `register.php` | api.qrserver.com | — | 捨てる(Discord ログインに統一、ただしすでにOTPログインで作成されているアカウントを考慮する必要があり、難しいのであれば残すのも手) |
+| 3 | Discord ログイン | `/login` | `api/auth/discord_*.php` | Discord OAuth | — | 残す |
+| 4 | プロフィール（アカウント削除） | `/profile` | `api/auth/profile.php` | なし | 要 | 残す |
+| 5 | ゲームサーバー起動／停止 | `/server` | `api/server/*.php` | AWS EC2 | **なし（穴）** | 残す(脆弱性は修正) |
+| 6 | ミニゲーム集 | `/games` → `/games/*` | なし | PeerJS, CDN | 不要 | 一部残す(Pong,軍議,アイテムレースを残す) |
+| 7 | 情報リンク | `/info` | なし | Notion へのリンク 1 件 | 不要 | 残す |
+| 8 | LoL チャンピオン情報 | `/lol` | なし（ブラウザ → Data Dragon） | Data Dragon | 不要 | 捨てる |
+| 9 | LoL チャンピオン AI 質問 | `/lol` のモーダル | `api/lol/champion-bot.php` | Anthropic API | 要 | 捨てる |
+| 10 | LoL 戦績（連勝・ランク） | `/lol-streak` | `api/lol/streak.php` | Riot API | 不要 | 残す |
+| 11 | LoL 試合予想 | `/lol-predict` | `api/lol/predict.php` | LoL Esports API | 投票は要 | 捨てる |
+| 12 | VALORANT 試合予想 | `/val-predict` | `api/valorant/predict.php` | PandaScore | 投票・手動登録は要 | 捨てる |
+| 13 | バンピック & ランキング（Arena） | `/arena/*` | `api/arena/` | なし | 要 | 捨てる |
+| 14 | ランニング記録（Web） | `/running/*` | `api/running/` → AWS | AWS | 要（Discord ログイン限定） | 残す |
+| 15 | ランニング記録（Discord Bot） | Discord | AWS のみ | Discord, AWS | Discord | 残す |
+| 16 | API 疎通確認（デバッグ） | なし | `api/debug/api_check.php` | LoL Esports, PandaScore | 要 | 捨てる |
 
 ---
 
