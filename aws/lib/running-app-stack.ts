@@ -68,6 +68,9 @@ export class RunningAppStack extends Stack {
     const createFunction = (
       idName: string,
       entryFile: string,
+      // AWS コンソールの関数一覧に出る説明。関数名が CDK の自動生成で読みにくいため、
+      // 何をする関数かをここで分かるようにしておく（運用時の取り違え防止）。
+      description: string,
       timeout: Duration,
       extraEnv?: Record<string, string>,
       extraProps?: Partial<lambda.FunctionOptions>,
@@ -85,6 +88,7 @@ export class RunningAppStack extends Stack {
       return new NodejsFunction(this, idName, {
         entry: path.join(__dirname, '..', 'src', 'handlers', entryFile),
         handler: 'handler',
+        description,
         // nodejs20.x は 2026-04-30 に非推奨化済み（2027-02-01 に新規作成不可）。
         // 新規構築なので最新のマネージドランタイムを使う。
         runtime: lambda.Runtime.NODEJS_24_X,
@@ -134,20 +138,38 @@ export class RunningAppStack extends Stack {
       retentionPeriod: Duration.days(14),
     });
 
-    const workerFn = createFunction('WorkerFn', 'worker.ts', Duration.seconds(30), undefined, {
-      deadLetterQueue: workerDlq,
-    });
+    const workerFn = createFunction(
+      'WorkerFn',
+      'worker.ts',
+      '[ランニング] Discordコマンドの実処理。記録のCRUD・ランキング集計・ロール付与を行い、フォローアップで応答する',
+      Duration.seconds(30),
+      undefined,
+      {
+        deadLetterQueue: workerDlq,
+      },
+    );
 
     const interactionsFn = createFunction(
       'InteractionsFn',
       'interactions.ts',
+      '[ランニング] Discord Interactions の受け口。Ed25519署名検証とPING応答、autocompleteの即答、コマンドはWorkerへ非同期委譲',
       Duration.seconds(5),
       { WORKER_FN: workerFn.functionName },
     );
 
-    const apiFn = createFunction('ApiFn', 'api.ts', Duration.seconds(15));
+    const apiFn = createFunction(
+      'ApiFn',
+      'api.ts',
+      '[ランニング] Web(PHPプロキシ)向けAPI。HMAC検証のうえ記録のCRUD・ランキング・画像の署名付きURL発行を行う',
+      Duration.seconds(15),
+    );
 
-    const schedulerFn = createFunction('SchedulerFn', 'scheduler.ts', Duration.minutes(2));
+    const schedulerFn = createFunction(
+      'SchedulerFn',
+      'scheduler.ts',
+      '[ランニング] 月初00:05 JSTの定期実行。月間1位ロールの入れ替え、閾値ロールの一括剥奪、前月TOP5の告知',
+      Duration.minutes(2),
+    );
 
     // --- DynamoDB 権限 ---
     table.grantReadWriteData(workerFn);
@@ -177,7 +199,9 @@ export class RunningAppStack extends Stack {
     // --- API Gateway (HTTP API) ---
     // CORS は設定しない: ブラウザからのアクセスは PHP プロキシ経由になる想定で、
     // このエンドポイントを直接叩くのは Discord（サーバー間通信）のみのため、ブラウザの CORS 制御は不要。
-    const httpApi = new apigwv2.HttpApi(this, 'HttpApi');
+    const httpApi = new apigwv2.HttpApi(this, 'HttpApi', {
+      description: '[ランニング] Discord Interactions の受け口と、Web(PHPプロキシ)向けの /v1 API',
+    });
 
     httpApi.addRoutes({
       path: '/discord/interactions',
