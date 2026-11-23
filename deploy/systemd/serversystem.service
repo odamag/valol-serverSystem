@@ -1,0 +1,27 @@
+[Unit]
+Description=serverSystem API (Rust)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=serversystem
+Group=serversystem
+# systemd(root) が読んでから権限を落とすので、env は root:root 0600 でよい
+EnvironmentFile=/etc/serversystem/env
+ExecStart=/srv/serversystem/current/bin/serversystem serve
+Restart=on-failure
+RestartSec=3
+
+# サンドボックス（侵入されたときの被害を小さくするため）
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/serversystem
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

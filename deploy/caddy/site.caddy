@@ -1,0 +1,46 @@
+# Caddy のサイト設定（リリースに入れて、リリースと一緒に切り替わり・戻る）。
+# ドメインはリポジトリに書かず、Caddy の systemd override で渡す環境変数 SITE_DOMAIN にする。
+{$SITE_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "SAMEORIGIN"
+		-Server
+	}
+
+	# Rust（新しい API）
+	handle /api/v1/* {
+		reverse_proxy 127.0.0.1:8081
+	}
+
+	# PHP（移行中だけ。段階 4 でこのブロックを消す）
+	# * が先頭か末尾にあるときは / をまたいで一致する（真ん中の * は / をまたがないので使わない）
+	@php_private path *config.php */lib/* /api/common.php
+	handle @php_private {
+		respond 404
+	}
+	handle /api/* {
+		root * /srv/serversystem/current
+		php_fastcgi unix//run/php/php8.3-fpm.sock
+	}
+
+	# ゲーム（静的ファイル）
+	handle /games/* {
+		root * /srv/serversystem/current
+		file_server
+	}
+
+	# SPA
+	handle {
+		root * /srv/serversystem/current/dist
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output stdout
+	}
+}

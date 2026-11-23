@@ -1,22 +1,37 @@
-name: Deploy to FTP
+name: Deploy to VPS
 
-# main へのマージ(push)をトリガーに、フロントエンドをビルドしてFTPでアップロードする。
-# 手動実行(workflow_dispatch)にも対応。
+# main へのマージ(push)をトリガーに、ビルド → リリースの組み立て → rsync over SSH → activate の順で
+# VPS(Lightsail)へ反映する。設計は document/renewal/11_vps_operations.md の §6。
 #
-# 注: ロリポップ(エコノミープラン)相手にSamKirkland/FTP-Deploy-Action(Node製の
-# basic-ftpライブラリ)で接続すると、ログインは通るがデータ接続(PASV)で
-# ECONNRESETになり失敗することを確認(FTP/FTPSどちらでも同様に失敗)。
-# Cyberduck等の成熟したFTPクライアントでは正常に接続できていることから、
-# 「サーバーが返すPASV応答のIPをそのまま信じず、賢く補正する」挙動の有無が
-# 差だと考えられる。同様に枯れたCLIクライアントである lftp に切り替えている。
+# 手動実行(workflow_dispatch)で release を指定すると、ビルドせずに activate だけを流す(戻す用)。
+# release には VPS の /srv/serversystem/releases/ にあるディレクトリ名(例: 20260101-1200-abc1234)を入れる。
 on:
   push:
     branches: [main]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      release:
+        description: '戻すリリースのディレクトリ名(空ならビルドして通常のデプロイ)'
+        required: false
+        default: ''
+        type: string
+
+# 同時に 2 つ流れると current の切り替えが競合するので、順番に流す(途中のものは止めない)
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DEPLOY_ROOT: /srv/serversystem
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    name: ビルドしてデプロイ
+    if: ${{ inputs.release == '' || inputs.release == null }}
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,50 +52,146 @@ jobs:
         run: npm run build
         # vite.config.js の outDir 設定により、成果物はリポジトリ直下の dist/ に出力される
 
-      - name: Install lftp
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp
-
-      - name: Deploy via FTP (lftp)
-        env:
-          FTP_SERVER: ${{ secrets.FTP_SERVER }}
-          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
-          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
-          FTP_SERVER_DIR: ${{ vars.FTP_SERVER_DIR || './' }}
+      # Rust は段階 2 から。server/Cargo.toml があるときだけビルドする
+      - name: Check server/ の存在確認
+        id: check-server
         run: |
-          lftp <<LFTP_EOF
-          set ftp:passive-mode true
-          set net:max-retries 2
-          set net:timeout 20
-          open -u "$FTP_USERNAME","$FTP_PASSWORD" "$FTP_SERVER"
-          mirror --reverse --verbose --parallel=3 \
-            --exclude-glob '.git*' \
-            --exclude-glob '.github/' \
-            --exclude-glob '.claude/' \
-            --exclude-glob 'frontend/' \
-            --exclude-glob 'node_modules/' \
-            --exclude-glob 'aws/' \
-            --exclude-glob 'document/' \
-            --exclude-glob 'db-folder/' \
-            --exclude-glob '.DS_Store' \
-            --exclude-glob '.clineignore' \
-            --exclude-glob 'config.php' \
-            --exclude-glob 'config.php.example' \
-            --exclude-glob 'site_config.php' \
-            --exclude-glob 'discord_config.php' \
-            --exclude-glob 'generate_hash.php' \
-            --exclude-glob 'aws.phar' \
-            --exclude-glob 'api/ai_config.php' \
-            --exclude-glob 'api/ai_config.php.example' \
-            --exclude-glob 'api/lol/config.php' \
-            --exclude-glob 'api/lol/config.php.example' \
-            --exclude-glob 'api/running/config.php' \
-            --exclude-glob 'api/running/config.php.example' \
-            --exclude-glob 'lib/aws.phar' \
-            --exclude-glob 'games/*/tests/' \
-            --exclude-glob 'games/*/dev/' \
-            --exclude-glob 'games/*/package.json' \
-            ./ "$FTP_SERVER_DIR"
-          bye
-          LFTP_EOF
-        # mirror --reverse はデフォルトで「差分アップロードのみ」、--delete を付けない限り
-        # サーバー側にしかないファイル(config.php・auth.dbなど)を削除しないので安全。
+          if [ -f server/Cargo.toml ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Rust cache
+        if: steps.check-server.outputs.exists == 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server
+
+      - name: Build Rust
+        if: steps.check-server.outputs.exists == 'true'
+        working-directory: server
+        run: cargo build --release --locked
+
+      - name: Assemble release
+        id: assemble
+        run: |
+          set -euo pipefail
+          # 名前は日時(UTC)-短い sha。activate は名前の降順で古さを判断するので、日時を先頭にする
+          RELEASE_ID="$(date -u +%Y%m%d-%H%M)-${GITHUB_SHA::7}"
+          R="release"
+          rm -rf "$R"
+          mkdir -p "$R"
+
+          cp -a dist "$R/dist"
+          cp -a deploy "$R/deploy"
+
+          # games/ からはテスト・開発用・package.json を除く(本番では使わない)
+          rsync -a \
+            --exclude='*/tests/' \
+            --exclude='*/dev/' \
+            --exclude='*/package.json' \
+            --exclude='node_modules/' \
+            games/ "$R/games/"
+
+          # api/ と lib/ は移行中だけ(段階 4 で無くなる)。設定ファイル・秘密・DB は入れない。
+          # これらは activate が /etc/serversystem/php からシンボリックリンクで張る
+          for d in api lib; do
+            if [ -d "$d" ]; then
+              rsync -a \
+                --exclude='*.example' \
+                --exclude='config.php' \
+                --exclude='site_config.php' \
+                --exclude='discord_config.php' \
+                --exclude='ai_config.php' \
+                --exclude='aws.phar' \
+                --exclude='db-folder/' \
+                "$d/" "$R/$d/"
+            fi
+          done
+
+          if [ -f server/target/release/serversystem ]; then
+            mkdir -p "$R/bin"
+            install -m 0755 server/target/release/serversystem "$R/bin/serversystem"
+          fi
+
+          echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
+          echo "リリース: $RELEASE_ID"
+          find "$R" -maxdepth 2 | sort
+
+      - name: Set up SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # ホスト鍵は known_hosts で固定する(初回接続での確認や ssh-keyscan はしない)
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+          printf '%s\n' \
+            'Host vps' \
+            '  User deploy' \
+            '  IdentityFile ~/.ssh/deploy_key' \
+            '  IdentitiesOnly yes' \
+            '  StrictHostKeyChecking yes' \
+            '  UserKnownHostsFile ~/.ssh/known_hosts' \
+            > ~/.ssh/config
+
+      - name: Upload release (rsync)
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          RELEASE_ID: ${{ steps.assemble.outputs.release_id }}
+        run: |
+          set -euo pipefail
+          # --delete は付けない(新しい空のディレクトリへ送るだけなので不要)
+          rsync -a --no-owner --no-group \
+            -e "ssh -F ~/.ssh/config -o HostName=$VPS_HOST" \
+            release/ "vps:$DEPLOY_ROOT/releases/$RELEASE_ID/"
+
+      - name: Activate
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          RELEASE_ID: ${{ steps.assemble.outputs.release_id }}
+        # 失敗すると activate が前のリリースに戻して非 0 で終わり、ここで赤くなる
+        run: ssh -F ~/.ssh/config -o HostName="$VPS_HOST" vps "$DEPLOY_ROOT/bin/activate" "$RELEASE_ID"
+
+  rollback:
+    name: 指定したリリースに戻す
+    if: ${{ inputs.release != '' && inputs.release != null }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Set up SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+          printf '%s\n' \
+            'Host vps' \
+            '  User deploy' \
+            '  IdentityFile ~/.ssh/deploy_key' \
+            '  IdentitiesOnly yes' \
+            '  StrictHostKeyChecking yes' \
+            '  UserKnownHostsFile ~/.ssh/known_hosts' \
+            > ~/.ssh/config
+
+      - name: Activate (戻す)
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          RELEASE_ID: ${{ inputs.release }}
+        # 名前はシェルに渡る値なので、activate 側の検証(英数字と . _ - だけ)に加えてここでも確かめる
+        run: |
+          set -euo pipefail
+          if ! [[ "$RELEASE_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+            echo "リリース名が正しくありません: $RELEASE_ID" >&2
+            exit 1
+          fi
+          ssh -F ~/.ssh/config -o HostName="$VPS_HOST" vps "$DEPLOY_ROOT/bin/activate" "$RELEASE_ID"

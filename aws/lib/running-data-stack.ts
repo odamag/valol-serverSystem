@@ -2,6 +2,7 @@ import { Stack, StackProps, RemovalPolicy, Duration } from 'aws-cdk-lib';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import { Construct } from 'constructs';
+import { readSiteOrigins } from './site-origins';
 
 /**
  * ランニング記録ボットのデータ層（DynamoDB テーブル + 写真用 S3 バケット）。
@@ -47,17 +48,15 @@ export class RunningDataStack extends Stack {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
+    const siteOrigins = readSiteOrigins(this.node);
     this.photoBucket = new s3.Bucket(this, 'PhotoBucket', {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       encryption: s3.BucketEncryption.S3_MANAGED,
       enforceSSL: true,
       cors: [
         {
-          allowedOrigins: [
-            // TODO: 本番ドメインが確定したら cdk.json の context.siteOrigin に本番オリジンを追加する。
-            // 本番ドメイン未確定のため、いったんコンテキスト経由（既定値はローカル開発用オリジン）で管理する。
-            this.node.tryGetContext('siteOrigin') ?? 'http://localhost:5173',
-          ],
+          // 新旧ドメインを同時に許可する。未設定ならローカル開発用オリジンだけにする。
+          allowedOrigins: siteOrigins.length > 0 ? siteOrigins : ['http://localhost:5173'],
           allowedMethods: [s3.HttpMethods.POST, s3.HttpMethods.PUT],
           allowedHeaders: ['*'],
         },

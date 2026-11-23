@@ -1,0 +1,3 @@
+# シェルスクリプトと VPS に置く設定は、Windows で取り出しても LF のままにする（CRLF だと bash が動かない）
+*.sh text eol=lf
+deploy/** text eol=lf

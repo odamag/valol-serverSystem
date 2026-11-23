@@ -22,6 +22,9 @@ db-folder/*.db
 dist/
 frontend/node_modules/
 
+# VPS の本物の設定（ひな形は deploy/env.example）
+deploy/env
+
 # ロックファイル
 starting_*.lock
 
