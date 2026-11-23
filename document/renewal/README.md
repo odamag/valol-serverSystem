@@ -14,6 +14,14 @@
 | [04_data_stores.md](04_data_stores.md) | SQLite 4ファイル・DynamoDB・S3・ファイル／ブラウザに置いている状態 |
 | [05_migration_notes.md](05_migration_notes.md) | 移行で変わること、ロリポップ制約のための回避策、今あるセキュリティ上の穴 |
 
+ここから下は、上の調査をもとに決めた**設計**:
+
+| ファイル | 中身 |
+|---|---|
+| [10_architecture.md](10_architecture.md) | 全体設計。決めたことの一覧、方針、API と URL の対応表、セッション・CSRF、Rust の構成、セキュリティ、まだ決まっていないこと、実装プランの分け方 |
+| [11_vps_operations.md](11_vps_operations.md) | VPS の構成（Ubuntu・Caddy・systemd）、シークレット、IAM、バックアップ、デプロイ、CI |
+| [12_migration_plan.md](12_migration_plan.md) | 移行の段階表、切り替え方と戻し方、データ移行、計算結果を変えないためのテスト |
+
 既存の設計書（機能の詳しい仕様）は `document/` 直下にある:
 `arena_design.md` / `running_api.md` / `aws_setup_guide.md` / `gungi_design.md` / `database_design.md`
 
