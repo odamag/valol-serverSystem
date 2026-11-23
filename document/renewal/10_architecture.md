@@ -27,7 +27,7 @@
 | # | 決めたこと | 理由 |
 |---|---|---|
 | D1 | ランニング記録は **AWS に残す**。Rust 側は今の PHP と同じ HMAC 署名つきの中継だけを作る | [→](#d1) |
-| D2 | ゲームサーバー起動は残す。**ログイン必須**にし、停止する相手はサーバー側でタグから探す（クライアントが送るインスタンス ID は使わない） | [→](#d2) |
+| D2 | ゲームサーバー起動は残すが、**Minecraft だけ**にする（Palworld・7 Days to Die はやめる）。**ログイン必須**にし、停止する相手はサーバー側でタグから探す（クライアントが送るインスタンス ID は使わない） | [→](#d2) |
 | D3 | ログインは **Discord だけ**。OTP は作らない。**身内の Discord サーバー（ギルド）のメンバーだけ**がログインできる。ログインした人は全員、ゲームサーバーを起動・停止できる | [→](#d3) |
 | D4 | サイト合言葉は残す。**API でも効かせる**。デバイストークンは localStorage をやめて HttpOnly Cookie にする | [→](#d4) |
 | D5 | DB は **SQLite 1 ファイル**（`app.db`）。新しい DB に入れるのは Discord で紐付いたユーザーだけ。捨てる機能の DB は取り込まず、保管もしない | [→](#d5) |
@@ -61,10 +61,10 @@
 | サイト合言葉（SiteGate） | OTP ログイン・新規登録（→ D3） |
 | Discord ログイン | LoL チャンピオン情報・AI 質問 |
 | プロフィール（アカウント削除） | LoL 試合予想・VALORANT 試合予想 |
-| ゲームサーバー起動／停止（穴は直す） | バンピック & ランキング（Arena） |
+| ゲームサーバー起動／停止（**Minecraft だけ**。穴は直す） | バンピック & ランキング（Arena） |
 | ミニゲーム：Pong・軍儀・アイテムレース（`games/race`） | ミニゲーム：Auto Battle RPG（`games/minigame`）・ライン通過ゲーム（`games/linegame`） |
 | 情報リンク | API 疎通確認（デバッグ） |
-| LoL 戦績（連勝・ランク） | |
+| LoL 戦績（連勝・ランク） | ゲームサーバーの Palworld・7 Days to Die |
 | ランニング記録（Web・Discord Bot） | |
 
 捨てる機能のコードは、移行の最初（段階 0）に PHP とフロントから消す。
@@ -98,7 +98,7 @@ flowchart LR
   end
 
   subgraph AWS
-    EC2[EC2 スポット<br/>Minecraft・Palworld・7DTD]
+    EC2[EC2 スポット<br/>Minecraft]
     RunAPI[API Gateway + Lambda<br/>ランニング]
     Dynamo[(DynamoDB / S3)]
   end
@@ -159,6 +159,8 @@ Caddy が URL の先頭で振り分ける。`/api/v1/*` は Rust、それ以外�
 - 状態の取得・起動・停止のすべてで、ログイン（D3 によりギルドのメンバー）を必須にする。状態にはサーバーの IP が含まれるため、取得も必須にする。
 - 停止のときは、クライアントが送ってくる `instanceId` を使わない。サーバー側で `Name` タグから対象のインスタンスを探して、それを終了する。今の PHP は送られてきた ID をそのまま terminate しているため、**同じ AWS アカウントの別のインスタンスでも消せてしまう**（今回見つけた穴 N1）。
 - AWS の権限は、専用の IAM ユーザーに最小限だけ渡す（[11 の IAM](11_vps_operations.md#iam)）。
+
+**Minecraft だけにする**: Palworld と 7 Days to Die はユーザーの判断でやめる。段階 0 で PHP からも外す（T01）。AWS 側の起動テンプレートなどは、ユーザーが消す（T03）。URL は `/servers/{target}` の形のまま残し、`target` は `minecraft` だけを受け付ける（ほかは 404）。あとでゲームを足すときに、URL もフロントも変えずに済むようにするため。
 
 **理由**: 起動すると課金が発生する。合言葉は全員が知っているので、合言葉だけでは足りない。かといって許可リストを作ると管理画面が要る。身内のギルドに入っていることを条件にすれば、設定は Guild ID 1 つで済む。
 
@@ -234,7 +236,7 @@ Caddy が URL の先頭で振り分ける。`/api/v1/*` は Rust、それ以外�
 | Discord 認可へ | `GET /api/auth/discord_redirect.php` | `GET /api/v1/auth/discord/start` | 合言葉 | |
 | Discord コールバック | `GET /api/auth/discord_callback.php` | `GET /api/v1/auth/discord/callback` | 合言葉 | Discord の開発者画面に新しい URL を追加する（古い URL は段階 4 まで残す） |
 | サーバー状態 | `GET /api/server/status.php` | `GET /api/v1/servers` | ログイン | 応答の形は同じ。`displayState` の `pending` の扱いを直す（§6.6） |
-| サーバー起動 | `POST /api/server/control.php` `{action:start,target}` | `POST /api/v1/servers/{target}/start` | ログイン | `target` = `minecraft` / `palworld` / `7days` |
+| サーバー起動 | `POST /api/server/control.php` `{action:start,target}` | `POST /api/v1/servers/{target}/start` | ログイン | `target` は `minecraft` だけ（ほかは 404） |
 | サーバー停止 | `POST /api/server/control.php` `{action:stop,target,instanceId}` | `POST /api/v1/servers/{target}/stop` | ログイン | `instanceId` は受け取らない（D2） |
 | LoL 戦績 | `GET /api/lol/streak.php` | `GET /api/v1/lol/streak` | 合言葉 | 応答（配列）は同じ |
 | ランニング | `/api/running/index.php?path=/v1/<X>` | `/api/v1/running/<X>` | ログイン | `<X>` は今のホワイトリストと同じ 9 つ。中身はそのまま中継 |
@@ -475,7 +477,7 @@ CREATE TABLE site_passes (
 | `DISCORD_REDIRECT_URI` | `https://example.com/api/v1/auth/discord/callback` | |
 | `DISCORD_GUILD_ID` | | メンバーかどうかを確かめるギルド |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` | | EC2（aws-config が自動で読む） |
-| `EC2_LT_MINECRAFT` / `EC2_LT_PALWORLD` / `EC2_LT_7DAYS` | `lt-0123...` | 起動テンプレート ID |
+| `EC2_LT_MINECRAFT` | `lt-0123...` | Minecraft の起動テンプレート ID（版は `$Latest` で起動する） |
 | `RIOT_API_KEY` | | LoL 戦績 |
 | `LOL_MEMBERS` | `名前#JP1,名前2#TAG` | 戦績を出すメンバー（カンマ区切り、`#` の前が名前・後がタグ） |
 | `RUNNING_API_BASE` | `https://xxxx.execute-api.ap-northeast-1.amazonaws.com` | ランニングの API Gateway |
@@ -483,7 +485,7 @@ CREATE TABLE site_passes (
 | `RUNNING_TIMEOUT_SECS` | `10` | |
 | `DISCORD_API_BASE` / `RIOT_ACCOUNT_BASE` / `RIOT_PLATFORM_BASE` | （省略時は本物の URL） | テストで wiremock に向けるため |
 
-ゲームサーバー 3 種の名前・タグ・ポート（`⛏️ Minecraft` / `minecraft` / 25565 など）は秘密ではないので、`services/game_servers.rs` に定数で書く（今の PHP と同じ値）。
+ゲームサーバーの名前・タグ・ポート（`⛏️ Minecraft` / `minecraft` / 25565）は秘密ではないので、`services/game_servers.rs` に定数の一覧として書く（今の PHP と同じ値）。一覧の形にしておくのは、あとでゲームを足すときに 1 行足せば済むようにするため。
 
 <a id="gameservers"></a>
 ### 6.6 ゲームサーバーの判定（今の PHP からの変更点つき）
@@ -502,6 +504,11 @@ CREATE TABLE site_passes (
 - 起動中ロックは、ロックファイルをやめて**メモリ上**（`Mutex<HashMap<target, 時刻>>`）に持つ。プロセスは 1 つなので足りる。再起動すると消えるが、起動のときに必ず EC2 に問い合わせて重複を確かめるので困らない。「ロックを確かめる → EC2 を確かめる → 起動する」の間は、ターゲットごとの Mutex で 1 つずつしか通さない（同時に 2 回押しても 2 台立たない）。
 - 状態の取得結果は **3 秒キャッシュ**する。複数の人が 5 秒ごとに見ても、AWS への問い合わせは増えない。起動・停止をしたらキャッシュを捨てる。
 - 起動のパラメータ（スポット・one-time・中断時 terminate・`Name` と `GameStatus=Booting` のタグ）は今と同じにする。
+- **Minecraft サーバー側との約束**（サーバーの起動構成を変えるときも守る。サーバー側の改修は、このリニューアルとは別に進めてよい）:
+  - 起動テンプレートは ID を変えず、AMI などを変えるときは**同じテンプレートの新しい版**にする（サイトは `$Latest` で起動する）。
+  - 準備ができたら、サーバー自身が `GameStatus=Online` のタグを付ける。
+  - 無人になったら、サーバー自身が終了する（サイトは、インスタンスが消えたら「停止」と表示するだけ）。
+  - 終了の途中で `GameStatus` を `Offline` などに戻さない（`running` の間に一瞬「読み込み中」と出てしまうため）。
 
 ---
 
@@ -644,7 +651,7 @@ pub fn json_request(method: &str, uri: &str, cookies: &[&str], body: Option<serd
 | ターン制限・48 時間自動承認の遅延評価 | **なくなる** | Arena を捨てる |
 | 予想の同期を「一覧を開いた時」に実行 | **なくなる** | 予想を捨てる |
 | Arena 管理者の自己登録 | **なくなる** | Arena を捨てる。新しい設計には管理者という概念自体が無い |
-| ゲームサーバー状態の 5 秒ポーリング | **残す**（サーバー側に 3 秒キャッシュを足す） | 見ている人は数人で、サーバーは 3 台。EC2 の状態はどのみちサーバー側から AWS に聞きに行く必要があるので、WebSocket や SSE にしても AWS へのポーリングは無くならない。仕組みが増えるわりに得るものが少ない |
+| ゲームサーバー状態の 5 秒ポーリング | **残す**（サーバー側に 3 秒キャッシュを足す） | 見ている人は数人で、サーバーは 1 台。EC2 の状態はどのみちサーバー側から AWS に聞きに行く必要があるので、WebSocket や SSE にしても AWS へのポーリングは無くならない。仕組みが増えるわりに得るものが少ない |
 | 起動中のロックファイル（`starting_*.lock`） | **メモリ上のロックに変える** | 常駐プロセスなのでファイルが要らない |
 | LoL 戦績の一時ファイルキャッシュ（5 分） | **メモリ上のキャッシュに変える**（5 分）。更新は同時に 1 つだけ | 同じ。Riot API の回数制限も守りやすい |
 | 期限切れトークンを「使われた時に」掃除 | **1 時間ごとのタスクで掃除** | 常駐できるので |
@@ -669,7 +676,7 @@ pub fn json_request(method: &str, uri: &str, cookies: &[&str], body: Option<serd
 | 2 | サイト合言葉が API で効いていない | すべての `/api/v1/*` に合言葉のミドルウェアをかける（D4） | 段階 3 |
 | 3 | OTP シークレットを外部の QR サービスに渡している | OTP をやめる（D3）。登録画面ごと消す | 段階 3（それまでは新規登録を止めてもよい） |
 | 4 | VALORANT の結果確定が誰でもできる | 機能ごと消す | 段階 0 |
-| 5 | AWS の長期アクセスキーを PHP が持っている | Lightsail のインスタンスには EC2 のような IAM ロールを付けられない。かわりに**専用の IAM ユーザーに最小限の権限**（3 つの起動テンプレートからの起動と、3 つのタグが付いたインスタンスの終了だけ）を渡す。キーは root だけが読めるファイルに置く。古いキーは段階 4 で消す（[11 の IAM](11_vps_operations.md#iam)） | 段階 3（Rust 用のキー）・段階 4（古いキーを消す） |
+| 5 | AWS の長期アクセスキーを PHP が持っている | Lightsail のインスタンスには EC2 のような IAM ロールを付けられない。かわりに**専用の IAM ユーザーに最小限の権限**（Minecraft の起動テンプレートからの起動と、`Name=minecraft` のタグが付いたインスタンスの終了だけ）を渡す。キーは root だけが読めるファイルに置く。古いキーは段階 4 で消す（[11 の IAM](11_vps_operations.md#iam)） | 段階 3（Rust 用のキー）・段階 4（古いキーを消す） |
 | 6 | Arena の初代管理者を誰でも取れる | 機能ごと消す。管理者という概念を持たない | 段階 0 |
 | 7 | 状態を変える API に CSRF 対策が無い | SameSite=Lax と Origin の確認（D8） | 段階 3 |
 

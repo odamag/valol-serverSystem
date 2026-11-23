@@ -202,10 +202,10 @@ Lightsail のインスタンスには、EC2 のような IAM ロール（イン�
 | 操作 | 範囲 |
 |---|---|
 | `ec2:DescribeInstances` | すべて（この操作はリソースで絞れない） |
-| `ec2:RunInstances` | 3 つの起動テンプレートを使う場合だけ（`ec2:LaunchTemplate` の条件） |
+| `ec2:RunInstances` | Minecraft の起動テンプレートを使う場合だけ（`ec2:LaunchTemplate` の条件）。テンプレートに自前の AMI が入るなら、その AMI（自分のアカウントのイメージ）も対象に含める |
 | `ec2:CreateTags` | 起動するときだけ（`ec2:CreateAction = RunInstances` の条件） |
-| `ec2:TerminateInstances` | `Name` タグが `minecraft`・`palworld`・`7days` のインスタンスだけ（`ec2:ResourceTag/Name` の条件） |
-| `iam:PassRole` | 起動テンプレートにインスタンスプロファイルが付いているときだけ、そのロールに限る |
+| `ec2:TerminateInstances` | `Name` タグが `minecraft` のインスタンスだけ（`ec2:ResourceTag/Name` の条件） |
+| `iam:PassRole` | 起動テンプレートにインスタンスプロファイル（S3 へのワールドのバックアップやタグ付けに使うもの）が付いているときだけ、そのロールに限る |
 
 Lightsail そのものを操作する権限は付けない（スナップショットや再起動は、ユーザーが Lightsail の画面でやる）。
 今の PHP が使っているアクセスキーは、段階 4 で PHP を消したあとに無効にし、消す。

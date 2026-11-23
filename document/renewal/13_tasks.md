@@ -28,9 +28,9 @@
 
 | ID | タスク | 担当 | 難しさ | 段階 | 前に終わっている必要があるもの |
 |---|---|---|---|---|---|
-| T01 | PHP の応急処置（ゲームサーバーにログイン必須、停止はタグで探す） | impl-standard | ★★ | 0 | — |
+| T01 | PHP の応急処置（ゲームサーバーにログイン必須、停止はタグで探す、Minecraft だけにする） | impl-standard | ★★ | 0 | — |
 | T02 | 捨てる機能のコードを消す | impl-light | ★ | 0 | — |
-| T03 | 段階 0 のデプロイと確認 | メイン + ユーザー | ★ | 0 | T01, T02 |
+| T03 | 段階 0 のデプロイと確認、Palworld・7 Days to Die の AWS の資源を消す | メイン + ユーザー | ★ | 0 | T01, T02 |
 | T04 | ドメインの取得、Lightsail の作成（静的 IP・ファイアウォール・自動スナップショット・SSH 鍵）、DNS | ユーザー（メインが手順を案内） | ★ | 1 | — |
 | T05 | VPS の構築ファイル一式（`deploy/`） | impl-standard | ★★ | 1 | — |
 | T06 | デプロイの自動化（`deploy.yml` を rsync に、CI の PHP を 8.3 に） | impl-standard | ★★ | 1 | T05 |
@@ -94,17 +94,18 @@ W6 段階4:  [T19 light] → [T20 standard]               → PR → T21
 エージェントの定義に共通の決まり（読む範囲、触らないもの、コミットしない、報告の形）が書いてあるので、ここにはタスクごとの中身だけを書く。
 「§」は特に断りがなければ `document/renewal/10_architecture.md` の節。
 
-### T01 PHP の応急処置（impl-standard）
+### T01 PHP の応急処置と Minecraft だけにする（impl-standard）
 
 ```text
-担当: T01 PHP の応急処置
-読むもの: document/renewal/10_architecture.md の D2 と §8「今回の調査で見つけた穴」の N1。api/common.php、api/server/control.php、api/server/status.php、frontend/src/pages/ServerControl.jsx。
+担当: T01 PHP の応急処置と Minecraft だけにする
+読むもの: document/renewal/10_architecture.md の D2（「Minecraft だけにする」の段落を含む）と §8「今回の調査で見つけた穴」の N1。api/common.php、api/server/control.php、api/server/status.php、frontend/src/pages/ServerControl.jsx。
 変えてよいファイル: api/server/control.php、api/server/status.php、frontend/src/pages/ServerControl.jsx
 やること:
 - control.php と status.php の先頭（session_start と common.php の読み込みのあと）で requireAuth() を呼ぶ。
 - control.php の stop は、POST の instanceId を使わない。start の重複確認と同じ describeInstances（tag:Name = 対象のタグ、状態 pending/running/stopping/shutting-down）で探したインスタンスの ID を terminate する。見つからなければ「⚠️ 停止するサーバーが見つかりません」を返す。
-- ServerControl.jsx: status または control の応答が 401 のときは、ポーリングを止め、「サーバーの操作にはログインが必要です」とログイン画面へのリンク（/login?next=/server。リンクを押す前に sessionStorage の postLoginRedirect に '/server' を入れる）を出す。ほかの表示は変えない。
-完了の条件: php -l api/server/control.php と php -l api/server/status.php が通る。cd frontend && npm run build が通る。
+- control.php と status.php の $servers から palworld と 7days を消し、minecraft だけにする。$creds の PALLWORLD_LT_ID・SEVENDAYS_LT_ID も読まない。
+- ServerControl.jsx: 説明文（page-subtitle）を「Minecraft の AWS サーバーを管理します」にする。status または control の応答が 401 のときは、ポーリングを止め、「サーバーの操作にはログインが必要です」とログイン画面へのリンク（/login?next=/server。リンクを押す前に sessionStorage の postLoginRedirect に '/server' を入れる）を出す。ほかの表示は変えない。
+完了の条件: php -l api/server/control.php と php -l api/server/status.php が通る。cd frontend && npm run build が通る。grep -rn "palworld\|7days" api/server frontend/src/pages が何も返さない。
 ```
 
 ### T02 捨てる機能のコードを消す（impl-light）
@@ -112,13 +113,14 @@ W6 段階4:  [T19 light] → [T20 standard]               → PR → T21
 ```text
 担当: T02 捨てる機能のコードを消す
 読むもの: document/renewal/10_architecture.md の §1 と「フロントの変更範囲」の表の段階 0 の行。frontend/src/App.jsx、frontend/src/components/Sidebar.jsx、frontend/src/pages/MiniGames.jsx。
-変えてよいファイル: 下の「消す」に挙げたもの、frontend/src/App.jsx、frontend/src/components/Sidebar.jsx、frontend/src/pages/MiniGames.jsx
+変えてよいファイル: 下の「消す」に挙げたもの、frontend/src/App.jsx、frontend/src/components/Sidebar.jsx、frontend/src/pages/MiniGames.jsx、frontend/src/index.css（Palworld の 1 行だけ）、config.php.example、README.md（Palworld の記述だけ）
 やること:
 - 消す（git rm）: frontend/src/pages/ArenaAdmin.jsx ArenaHeadToHead.jsx ArenaHome.jsx ArenaMyGames.jsx ArenaRanking.jsx ArenaSeries.jsx LoLInfo.jsx LoLPredict.jsx ValorantPredict.jsx、frontend/src/components/arena/、frontend/src/hooks/useSeriesSync.js、frontend/src/lib/arenaApi.js、games/minigame/、games/linegame/、api/arena/、api/lol/predict.php、api/lol/champion-bot.php、api/valorant/、api/debug/、api/ai_config.php.example
 - App.jsx: 消したページの import と Route を消す（/lol、/lol-predict、/val-predict、/arena 以下すべて）。
 - Sidebar.jsx: 消したページへのメニューを消す。
 - MiniGames.jsx: /games/minigame/ と /games/linegame/ の 2 件を一覧から消す。
-- index.css の使われなくなったスタイルは消さない（あとで別にやる）。
+- index.css の使われなくなったスタイルは消さない（あとで別にやる）。ただし `.server-card-header.palworld` の 1 行だけは消す。
+- config.php.example から PALLWORLD_LT_ID と SEVENDAYS_LT_ID の行を消す。README.md の「MinecraftやPalworldのサーバー」を「Minecraftのサーバー」にする。
 完了の条件: cd frontend && npm run build が通る。grep -rn --include=*.jsx --include=*.js "arena\|LoLPredict\|ValorantPredict\|LoLInfo\|minigame/\|linegame" frontend/src が何も返さない（runningApi.js のコメントの "arenaApi.js の複製" だけは残ってよい）。
 ```
 
@@ -241,9 +243,9 @@ W6 段階4:  [T19 light] → [T20 standard]               → PR → T21
 変えてよいファイル: server/src/services/game_servers.rs、server/src/routes/servers.rs、server/tests/servers.rs（新規）。state を組み立てる関数で Ec2Backend を差し込む 1 行が必要なら、その 1 行だけ server/src/state.rs を変えてよい。
 やること:
 - Ec2Backend（aws-sdk-ec2）: find_instance は status.php の describeInstances と同じフィルタ。run_from_template は control.php の runInstances と同じパラメータ（スポット・one-time・terminate・Name と GameStatus=Booting のタグ）。
-- GameServerService: 3 種の定数（名前・タグ・ポート）、§6.6 の displayState の表、起動中ロック（120 秒、メモリ上、ターゲットごとの Mutex で 1 つずつ）、状態の 3 秒キャッシュ（起動・停止で捨てる）。status の JSON は status.php と同じ形。メッセージの文言は control.php と同じ。AWS のエラー文は画面に出さない（§6.3）。
-- ルート: GET /api/v1/servers、POST /api/v1/servers/{target}/start、POST /api/v1/servers/{target}/stop（どれも CurrentUser 必須。target が 3 種以外なら 404）。
-- テスト（偽の GameServerBackend）: 12 §3.4 の項目すべて。未ログインで 401。
+- GameServerService: サーバーの定数の一覧（今は Minecraft の 1 件だけ。名前・タグ・ポート・起動テンプレート ID の設定名。§6.5 の下の段落）、§6.6 の displayState の表、起動中ロック（120 秒、メモリ上、ターゲットごとの Mutex で 1 つずつ）、状態の 3 秒キャッシュ（起動・停止で捨てる）。status の JSON は status.php と同じ形。メッセージの文言は control.php と同じ。AWS のエラー文は画面に出さない（§6.3）。
+- ルート: GET /api/v1/servers、POST /api/v1/servers/{target}/start、POST /api/v1/servers/{target}/stop（どれも CurrentUser 必須。target が minecraft 以外なら 404）。
+- テスト（偽の GameServerBackend）: 12 §3.4 の項目すべて。未ログインで 401。target=palworld で 404。
 完了の条件: cd server && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test が通る。
 ```
 
@@ -313,7 +315,7 @@ W6 段階4:  [T19 light] → [T20 standard]               → PR → T21
 
 | ID | 中身 |
 |---|---|
-| T03 | PR をユーザーがマージ → FTP で自動デプロイ → ユーザーがブラウザで 12 §4 の段階 0 の項目を確かめる（メインは確かめる手順を示す） |
+| T03 | PR をユーザーがマージ → FTP で自動デプロイ → ユーザーがブラウザで 12 §4 の段階 0 の項目を確かめる（メインは確かめる手順を示す）。そのあとユーザーが AWS の画面で、Palworld・7 Days to Die のインスタンスが動いていないことを確かめ、起動テンプレート 2 つ、専用の AMI とスナップショット・セキュリティグループ・IAM ロール（あれば）を消す。S3 のワールドのバックアップは、残すか消すかをユーザーが決める。本番の `config.php` の 2 つの ID の行は、消しても残してもよい（もう読まれない） |
 | T04 | ユーザー: ドメインを取る（Route 53 がおすすめ。10 §9）。Lightsail で東京・Ubuntu 24.04・512 MB（IPv4 付き）のインスタンスを作り、静的 IP を付け、ネットワークで 22/80/443 を開け、自動スナップショットを有効にする。DNS の A（と AAAA）レコードを静的 IP に向ける。SSH 鍵を手元に置く。メインは画面の手順を 1 つずつ案内する |
 | T08 | メイン: ユーザーの許可を得て SSH で `deploy/setup.sh` を流す。ユーザー: `/etc/serversystem/env` と `/etc/serversystem/php/*` に秘密の値を自分で入れる（メインはひな形だけ用意する）。GitHub の Secrets を入れる。メイン: `cdk.json` の `siteOrigins` の先頭に新しいオリジンを足して PR（`cdk deploy` は main へのマージで流れる）。そのあとは 12 の「段階 1 の手順」のとおり |
 | T11 | メイン: T10 のマージ後、12 §3.2 の PHP と Rust の突き合わせをする。手動スナップショットを撮ってもらってから |
