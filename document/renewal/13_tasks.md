@@ -28,7 +28,7 @@
 
 | ID | タスク | 担当 | 難しさ | 段階 | 前に終わっている必要があるもの |
 |---|---|---|---|---|---|
-| T01 | PHP の応急処置（ゲームサーバーにログイン必須、停止はタグで探す、Minecraft だけにする） | impl-standard | ★★ | 0 | — |
+| T01 | PHP の応急処置（ゲームサーバーに認証を必須［のちに合言葉だけに変更］、停止はタグで探す、Minecraft だけにする） | impl-standard | ★★ | 0 | — |
 | T02 | 捨てる機能のコードを消す | impl-light | ★ | 0 | — |
 | T03 | 段階 0 のデプロイと確認、Palworld・7 Days to Die の AWS の資源を消す | メイン + ユーザー | ★ | 0 | T01, T02 |
 | T04 | ドメインの取得、Lightsail の作成（静的 IP・ファイアウォール・自動スナップショット・SSH 鍵）、DNS | ユーザー（メインが手順を案内） | ★ | 1 | — |
@@ -104,6 +104,7 @@ W6 段階4:  [T19 light] → [T20 standard]               → PR → T21
 - control.php と status.php の先頭（session_start と common.php の読み込みのあと）で requireAuth() を呼ぶ。
 - control.php の stop は、POST の instanceId を使わない。start の重複確認と同じ describeInstances（tag:Name = 対象のタグ、状態 pending/running/stopping/shutting-down）で探したインスタンスの ID を terminate する。見つからなければ「⚠️ 停止するサーバーが見つかりません」を返す。
 - control.php と status.php の $servers から palworld と 7days を消し、minecraft だけにする。$creds の PALLWORLD_LT_ID・SEVENDAYS_LT_ID も読まない。
+（済。のちにユーザーの判断で、ログインではなく合言葉（requireSiteAuth）だけを必須にした。10 の D2）
 - ServerControl.jsx: 説明文（page-subtitle）を「Minecraft の AWS サーバーを管理します」にする。status または control の応答が 401 のときは、ポーリングを止め、「サーバーの操作にはログインが必要です」とログイン画面へのリンク（/login?next=/server。リンクを押す前に sessionStorage の postLoginRedirect に '/server' を入れる）を出す。ほかの表示は変えない。
 完了の条件: php -l api/server/control.php と php -l api/server/status.php が通る。cd frontend && npm run build が通る。grep -rn "palworld\|7days" api/server frontend/src/pages が何も返さない。
 ```
@@ -182,7 +183,7 @@ W6 段階4:  [T19 light] → [T20 standard]               → PR → T21
 - §6.2 のファイルを全部作る。§6.7 の型と関数を、書かれた形のとおりに全部作る。
 - 中身まで作るもの: config（§6.5 の変数すべて、APP_SITE_GATE_ENABLED を含む）、error（§6.3）、state、clock、db（PRAGMA・プール・sqlx::migrate!）、migrations/0001_init.sql（§6.4）、auth/token、auth/session（CurrentUser・MaybeUser を含む）、auth/site_pass、middleware/csrf、middleware/site_gate、middleware/rate_limit（client_ip を含む）、routes/health、routes/mod.rs（URL 対応表の新しいパスをすべて登録し、どのパスにどのミドルウェアがかかるかを 1 か所で分かるようにする）、lib.rs の build_app、main.rs（clap: serve / import-legacy / hash-password。serve は起動時にマイグレーションを流し、1 時間ごとに期限切れのセッションと合言葉を消すタスクを動かし、SIGTERM で正しく止まる）、tests/common/mod.rs（§6.7 の補助）。
 - 仮のままにするもの（T10〜T16 が中身を作る）: routes の site・auth・me・servers・lol・running のハンドラ（501 と {"success":false,"message":"未実装です"} を返す）、services の 3 つ、auth/discord、cli の 2 つ。型と関数の形は §6.7 のとおりに作っておき、中身だけ仮にする。GameServerBackend の本物（Ec2Backend）は作らなくてよいが、state を組み立てるときに差し込む場所は作る。
-- テスト: health が 200。Origin の無い POST が 403、正しい Origin なら通る。APP_SITE_GATE_ENABLED が true のとき site_pass の無いリクエストが 401、例外の 3 パスは通る、false なら素通り。セッションの作成・確認・30 日での期限切れ・1 時間ごとの last_seen_at 更新・削除。合言葉の Cookie の作成と期限切れ。RateLimiter（10 回で止まり、600 秒で戻る）。client_ip（X-Forwarded-For の一番右）。hash_token の長さ。Config::from_env が足りない変数を全部並べる。
+- テスト: health が 200。Origin の無い POST が 403、正しい Origin なら通る。APP_SITE_GATE_ENABLED が true のとき site_pass の無いリクエストが 401、例外の 3 パスは通る、false なら素通り。セッションの作成・確認・30 日での期限切れ・1 時間ごとの last_seen_at 更新・削除。合言葉の Cookie の作成と期限切れ。SitePass 抽出子（APP_SITE_GATE_ENABLED=false でも、site_pass が無ければ 401）。RateLimiter（10 回で止まり、600 秒で戻る）。client_ip（X-Forwarded-For の一番右）。hash_token の長さ。Config::from_env が足りない変数を全部並べる。
 - CI: ci.yml に server ジョブ（cargo fmt --check、clippy -D warnings、cargo test --locked、Swatinem/rust-cache）を足す。
 - server/.env.example（ダミー値）と rust-toolchain.toml（channel = "1.100"）。
 完了の条件: cd server && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test が通る。cargo run -- serve を .env.example の値で起動し、curl http://127.0.0.1:8081/api/v1/health が {"success":true} を返す。
@@ -239,13 +240,13 @@ W6 段階4:  [T19 light] → [T20 standard]               → PR → T21
 ```text
 担当: T14 ゲームサーバーを Rust に
 読むもの: document/renewal/10_architecture.md の D2・§6.6・§6.7（services/game_servers.rs と tests/common）。document/renewal/12_migration_plan.md の §3.4。api/server/status.php、api/server/control.php（T01 で直したもの）。server/src/services/game_servers.rs と server/src/routes/servers.rs（T09 の仮のもの）。
-使う部品: §6.7 の GameServerBackend・InstanceInfo・GameServerService の形、CurrentUser、tests/common。
+使う部品: §6.7 の GameServerBackend・InstanceInfo・GameServerService の形、SitePass、tests/common。
 変えてよいファイル: server/src/services/game_servers.rs、server/src/routes/servers.rs、server/tests/servers.rs（新規）。state を組み立てる関数で Ec2Backend を差し込む 1 行が必要なら、その 1 行だけ server/src/state.rs を変えてよい。
 やること:
 - Ec2Backend（aws-sdk-ec2）: find_instance は status.php の describeInstances と同じフィルタ。run_from_template は control.php の runInstances と同じパラメータ（スポット・one-time・terminate・Name と GameStatus=Booting のタグ）。
 - GameServerService: サーバーの定数の一覧（今は Minecraft の 1 件だけ。名前・タグ・ポート・起動テンプレート ID の設定名。§6.5 の下の段落）、§6.6 の displayState の表、起動中ロック（120 秒、メモリ上、ターゲットごとの Mutex で 1 つずつ）、状態の 3 秒キャッシュ（起動・停止で捨てる）。status の JSON は status.php と同じ形。メッセージの文言は control.php と同じ。AWS のエラー文は画面に出さない（§6.3）。
-- ルート: GET /api/v1/servers、POST /api/v1/servers/{target}/start、POST /api/v1/servers/{target}/stop（どれも CurrentUser 必須。target が minecraft 以外なら 404）。
-- テスト（偽の GameServerBackend）: 12 §3.4 の項目すべて。未ログインで 401。target=palworld で 404。
+- ルート: GET /api/v1/servers、POST /api/v1/servers/{target}/start、POST /api/v1/servers/{target}/stop（どれも SitePass 必須。CurrentUser は使わない＝ログインは要らない。APP_SITE_GATE_ENABLED=false でも SitePass で確かめる。target が minecraft 以外なら 404）。
+- テスト（偽の GameServerBackend）: 12 §3.4 の項目すべて。合言葉なしで 401（APP_SITE_GATE_ENABLED=false でも）。合言葉だけ（ログインなし）で 200。target=palworld で 404。
 完了の条件: cd server && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test が通る。
 ```
 
@@ -274,9 +275,9 @@ W6 段階4:  [T19 light] → [T20 standard]               → PR → T21
 やること:
 - 「フロントの変更範囲」の段階 3 の行をすべてやる。呼ぶ URL は URL 対応表の新しいほう。
 - SiteGate.jsx: GET /api/v1/site/status → 通っていなければ入力欄 → POST /api/v1/site/login。localStorage は使わない。起動時に古いキー（今のコードの SITE_TOKEN_KEY）を localStorage から消す。429 と 401 のときは返ってきた message を出す。
-- ServerControl.jsx: GET /api/v1/servers と POST /api/v1/servers/{target}/start|stop（ボディなし）。
+- ServerControl.jsx: GET /api/v1/servers と POST /api/v1/servers/{target}/start|stop（ボディなし）。401 のときはページを読み直して合言葉の入力に戻す。
 - Login.jsx: OTP の入力欄を消す。discord_error=not_member のときは「この Discord アカウントは、サーバーのメンバーではないためログインできません」を出す。
-- App.jsx の /server を RequireLogin で包み、/register を消す。
+- App.jsx の /register を消す（/server はログインで包まない。10 の D2）。
 - 状態を変える fetch（POST・DELETE）は、今のとおり同じオリジンに credentials: 'include' で送る（Origin はブラウザが付ける）。
 完了の条件: cd frontend && npm run build が通る。grep -rn "\.php" frontend/src が何も返さない。
 ```

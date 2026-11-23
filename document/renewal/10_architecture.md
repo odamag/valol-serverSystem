@@ -27,8 +27,8 @@
 | # | 決めたこと | 理由 |
 |---|---|---|
 | D1 | ランニング記録は **AWS に残す**。Rust 側は今の PHP と同じ HMAC 署名つきの中継だけを作る | [→](#d1) |
-| D2 | ゲームサーバー起動は残すが、**Minecraft だけ**にする（Palworld・7 Days to Die はやめる）。**ログイン必須**にし、停止する相手はサーバー側でタグから探す（クライアントが送るインスタンス ID は使わない） | [→](#d2) |
-| D3 | ログインは **Discord だけ**。OTP は作らない。**身内の Discord サーバー（ギルド）のメンバーだけ**がログインできる。ログインした人は全員、ゲームサーバーを起動・停止できる | [→](#d3) |
+| D2 | ゲームサーバー起動は残すが、**Minecraft だけ**にする（Palworld・7 Days to Die はやめる）。**合言葉が必須**（ログインは要らない）にし、停止する相手はサーバー側でタグから探す（クライアントが送るインスタンス ID は使わない） | [→](#d2) |
+| D3 | ログインは **Discord だけ**。OTP は作らない。**身内の Discord サーバー（ギルド）のメンバーだけ**がログインできる。ゲームサーバーの起動・停止にはログインは要らない（D2） | [→](#d3) |
 | D4 | サイト合言葉は残す。**API でも効かせる**。デバイストークンは localStorage をやめて HttpOnly Cookie にする | [→](#d4) |
 | D5 | DB は **SQLite 1 ファイル**（`app.db`）。新しい DB に入れるのは Discord で紐付いたユーザーだけ。捨てる機能の DB は取り込まず、保管もしない | [→](#d5) |
 | D6 | API の URL は **`/api/v1/...` に揃える**。JSON の形は今のまま変えず、変えるのは URL だけ（例外は 3 か所） | [→](#d6) |
@@ -153,16 +153,17 @@ Caddy が URL の先頭で振り分ける。`/api/v1/*` は Rust、それ以外�
 **あとで VPS に持ってくるとき**: Rust 側の `/api/v1/running/*` の URL と JSON の形を変えなければ、フロントを直さずに中身だけ差し替えられる。そのため、中継は `services/running_relay.rs` に閉じ込めておく。
 
 <a id="d2"></a>
-### D2. ゲームサーバー起動はログイン必須にする
+### D2. ゲームサーバー起動は合言葉が必須（ログインは要らない）
 
 **決定**
-- 状態の取得・起動・停止のすべてで、ログイン（D3 によりギルドのメンバー）を必須にする。状態にはサーバーの IP が含まれるため、取得も必須にする。
+- 状態の取得・起動・停止のすべてで、**合言葉（D4）を必須**にする。Discord ログインは要らない。状態にはサーバーの IP が含まれるため、取得も必須にする。
+- Rust では、ゲームサーバーのルートは `SitePass` 抽出子（§6.7）で合言葉を確かめる。合言葉のミドルウェア（`APP_SITE_GATE_ENABLED`）が切れていても、ここだけは必ず確かめる。段階 2〜3 の途中でミドルウェアを切っている間に、課金の発生する操作が誰でもできるようにならないため。
 - 停止のときは、クライアントが送ってくる `instanceId` を使わない。サーバー側で `Name` タグから対象のインスタンスを探して、それを終了する。今の PHP は送られてきた ID をそのまま terminate しているため、**同じ AWS アカウントの別のインスタンスでも消せてしまう**（今回見つけた穴 N1）。
 - AWS の権限は、専用の IAM ユーザーに最小限だけ渡す（[11 の IAM](11_vps_operations.md#iam)）。
 
 **Minecraft だけにする**: Palworld と 7 Days to Die はユーザーの判断でやめる。段階 0 で PHP からも外す（T01）。AWS 側の起動テンプレートなどは、ユーザーが消す（T03）。URL は `/servers/{target}` の形のまま残し、`target` は `minecraft` だけを受け付ける（ほかは 404）。あとでゲームを足すときに、URL もフロントも変えずに済むようにするため。
 
-**理由**: 起動すると課金が発生する。合言葉は全員が知っているので、合言葉だけでは足りない。かといって許可リストを作ると管理画面が要る。身内のギルドに入っていることを条件にすれば、設定は Guild ID 1 つで済む。
+**理由**: ユーザーの判断（2026-11-23）。仲間が Discord ログインの手間なしにサーバーを立てられるほうを取る。起動すると課金が発生するが、合言葉を知っているのは身内だけで、合言葉の総当たりは IP ごとの回数制限（D4）で防ぐ。サーバーは無人になると自分で終了し（§6.6）、同時に 2 台は立たない（起動中ロックとタグでの重複確認）ので、合言葉が漏れたときの損は「1 台が無人で終わるまでの料金」に限られる。漏れたと思ったら合言葉を変える（`serversystem hash-password`）。
 
 <a id="d3"></a>
 ### D3. ログインは Discord だけ、ギルドのメンバーに限る
@@ -171,7 +172,7 @@ Caddy が URL の先頭で振り分ける。`/api/v1/*` は Rust、それ以外�
 - OTP ログイン・新規登録は作らない。`otp_secret` は新しい DB に入れない。
 - Discord OAuth2 の scope を `identify` から **`identify guilds.members.read`** に変える。コールバックで `GET /users/@me/guilds/{DISCORD_GUILD_ID}/member` を呼び、404 ならログインさせない（`/login?discord_error=not_member` に戻す）。
 - メンバーかどうかは**ログインしたときだけ**確かめる。ギルドを抜けた人も、セッションが切れるまで（最大 30 日、D7）は使える。気になるならセッションの期間を短くする。
-- ログインした人は全員、ゲームサーバーを起動・停止できる。管理者という区別は持たない。
+- 管理者という区別は持たない。ゲームサーバーの起動・停止はログインせずに合言葉だけでできる（D2）。
 
 **理由**
 - 残す機能のうち、ユーザー ID を記録しているものは無い（ゲームサーバーも LoL 戦績も記録しない。ランニングは Discord ID で記録している）。OTP だけで登録した人が持っているデータは、捨てる機能（Arena・予想）の分しか無い。だから OTP をやめても、その人は次から Discord でログインし直せば何も失わない。
@@ -235,9 +236,9 @@ Caddy が URL の先頭で振り分ける。`/api/v1/*` は Rust、それ以外�
 | アカウント削除 | `DELETE /api/auth/profile.php` | `DELETE /api/v1/me` | ログイン | |
 | Discord 認可へ | `GET /api/auth/discord_redirect.php` | `GET /api/v1/auth/discord/start` | 合言葉 | |
 | Discord コールバック | `GET /api/auth/discord_callback.php` | `GET /api/v1/auth/discord/callback` | 合言葉 | Discord の開発者画面に新しい URL を追加する（古い URL は段階 4 まで残す） |
-| サーバー状態 | `GET /api/server/status.php` | `GET /api/v1/servers` | ログイン | 応答の形は同じ。`displayState` の `pending` の扱いを直す（§6.6） |
-| サーバー起動 | `POST /api/server/control.php` `{action:start,target}` | `POST /api/v1/servers/{target}/start` | ログイン | `target` は `minecraft` だけ（ほかは 404） |
-| サーバー停止 | `POST /api/server/control.php` `{action:stop,target,instanceId}` | `POST /api/v1/servers/{target}/stop` | ログイン | `instanceId` は受け取らない（D2） |
+| サーバー状態 | `GET /api/server/status.php` | `GET /api/v1/servers` | 合言葉（必ず） | 応答の形は同じ。`displayState` の `pending` の扱いを直す（§6.6） |
+| サーバー起動 | `POST /api/server/control.php` `{action:start,target}` | `POST /api/v1/servers/{target}/start` | 合言葉（必ず） | `target` は `minecraft` だけ（ほかは 404） |
+| サーバー停止 | `POST /api/server/control.php` `{action:stop,target,instanceId}` | `POST /api/v1/servers/{target}/stop` | 合言葉（必ず） | `instanceId` は受け取らない（D2） |
 | LoL 戦績 | `GET /api/lol/streak.php` | `GET /api/v1/lol/streak` | 合言葉 | 応答（配列）は同じ |
 | ランニング | `/api/running/index.php?path=/v1/<X>` | `/api/v1/running/<X>` | ログイン | `<X>` は今のホワイトリストと同じ 9 つ。中身はそのまま中継 |
 | 死活確認 | — | `GET /api/v1/health` | なし | 新規。`{"success":true}` を返すだけ。デプロイの確認に使う |
@@ -246,7 +247,7 @@ Caddy が URL の先頭で振り分ける。`/api/v1/*` は Rust、それ以外�
 | VALORANT 予想 | `/api/valorant/predict.php` | **廃止** | — | 段階 0 で消す |
 | 疎通確認 | `/api/debug/api_check.php` | **廃止** | — | 段階 0 で消す |
 
-「合言葉」は「`site_pass` Cookie が有効」という意味。「ログイン」はそれに加えてログインセッションが有効なこと。
+「合言葉」は「`site_pass` Cookie が有効」という意味（`APP_SITE_GATE_ENABLED=false` の間は確かめない）。「合言葉（必ず）」は、その設定にかかわらず確かめる。「ログイン」はそれに加えてログインセッションが有効なこと。
 
 ランニングで中継するパス（`<X>`）:
 `GET/POST records`、`PATCH/DELETE records/{YYYY-MM-DD}_{32hex}`、`POST records/{id}/photo-url`、`POST records/{id}/photo`、`GET ranking`、`GET me/summary`、`GET settings`。
@@ -261,11 +262,11 @@ Rust は先頭の `/api/v1/running` を `/v1` に置き換えて AWS に送る�
 | `pages/MiniGames.jsx` | Auto Battle RPG とライン通過ゲームを一覧から消す（`games/minigame`・`games/linegame` も削除） | 0 |
 | `pages/LoLStreak.jsx` | URL を `/api/v1/lol/streak` に | 2 |
 | `components/SiteGate.jsx` | 作り直す（状態を確認 → 入力 → Cookie。localStorage を使わない） | 3 |
-| `App.jsx` | ログイン状態の URL。`/server` を `RequireLogin` で包む。`/register` を消す | 3 |
+| `App.jsx` | ログイン状態の URL。`/register` を消す（`/server` はログインで包まない。D2） | 3 |
 | `pages/Login.jsx` | OTP の入力欄を消し、Discord ボタンだけにする。リンク先を `/api/v1/auth/discord/start` に。`not_member` のエラー表示を足す | 3 |
 | `pages/Register.jsx` | 削除 | 3 |
 | `pages/Profile.jsx`・`components/Sidebar.jsx` | URL の変更 | 3 |
-| `pages/ServerControl.jsx` | URL と起動・停止の呼び方を変える。401 ならログイン画面へ | 3 |
+| `pages/ServerControl.jsx` | URL と起動・停止の呼び方を変える。401 なら合言葉の入力に戻す（ページを読み直す） | 3 |
 | `lib/runningApi.js` | ベースを `/api/v1/running` にし、`?path=` のフォールバックを消す | 3 |
 | `vite.config.js` | 開発用プロキシ：`/api/v1` → Rust（`localhost:8081`）、`/api` → PHP（`localhost:8080`）。段階 4 で PHP の行を消す | 2・4 |
 
@@ -291,7 +292,7 @@ Rust は先頭の `/api/v1/running` を `/v1` に置き換えて AWS に送る�
 **理由**
 - **JWT にしない理由**: 取り消し（ログアウト・アカウント削除）のために結局サーバー側に表が要る。それなら最初から表に持つほうが単純。署名鍵の管理も要らない。
 - **tower-sessions などのライブラリを使わない理由**: やることは「乱数を作る・ハッシュを保存する・照合する・期限を延ばす」だけで、約 150 行で書ける。仕組みが手元に全部あるので、合言葉とログインで同じ書き方ができ、テストで時刻を固定しやすい。ライブラリの大きな更新に付き合う必要もない。
-- **30 日にする理由**: 今は 30 分で切れるが、Discord ログインは `prompt=none` でボタン 1 回なので、長めにして手間を減らす。危ない操作（ゲームサーバーの起動）はギルドのメンバーに限っている。短くしたいときは定数 1 つで変えられる。
+- **30 日にする理由**: 今は 30 分で切れるが、Discord ログインは `prompt=none` でボタン 1 回なので、長めにして手間を減らす。（ゲームサーバーの起動は合言葉だけでできるので、セッションの長さとは関係しない。D2）短くしたいときは定数 1 つで変えられる。
 - PHP のセッションは引き継げないので、切り替えのとき（段階 3）に全員が合言葉とログインを 1 回やり直す。
 
 Discord ログインの流れ:
@@ -576,6 +577,7 @@ pub async fn check_site_pass(db: &SqlitePool, token: &str, now: i64) -> AppResul
 pub async fn purge_expired_site_passes(db: &SqlitePool, now: i64) -> AppResult<u64>;
 pub fn site_pass_cookie(token: &str, config: &Config) -> Cookie<'static>;
 pub fn device_name_from_ua(ua: &str) -> &'static str;           // 今の deviceNameFromUA と同じ分け方
+pub struct SitePass;                                            // FromRequestParts<AppState>。有効な site_pass が無ければ AppError::SiteAuthRequired。APP_SITE_GATE_ENABLED にかかわらず確かめる（D2）
 
 // ── middleware ────────────────────────────────────────────
 pub async fn require_site_pass(State(s): State<AppState>, req: Request, next: Next) -> Response; // site_gate.rs。APP_SITE_GATE_ENABLED=false なら素通り
