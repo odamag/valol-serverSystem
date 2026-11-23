@@ -54,6 +54,36 @@ jobs:
         working-directory: games/race
         run: npm test
 
+  server:
+    name: Rust(server/)の検査とテスト
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 版は server/rust-toolchain.toml で固定している。
+      # 引数なしの install は、そのファイルの版と components(rustfmt・clippy)を入れる。
+      - name: Set up Rust
+        run: rustup toolchain install
+
+      - name: Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      # 外部のサービスは呼ばない(wiremock と trait の偽物)ので、シークレットは要らない
+      - name: Test
+        run: cargo test --locked
+
   php-lint:
     name: PHPの構文チェック
     runs-on: ubuntu-latest

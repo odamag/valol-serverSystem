@@ -9,6 +9,11 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      // 新しい API（Rust）。'/api' より先に書く（先に一致したほうが使われるため）
+      '/api/v1': {
+        target: 'http://localhost:8081',
+        changeOrigin: true,
+      },
       '/api': {
         target: 'http://localhost:8080',
         changeOrigin: true,

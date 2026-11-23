@@ -1,0 +1,42 @@
+[package]
+name = "serversystem"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# 依存クレートは設計書 10 §6.1 の表のもの。後のタスクが Cargo.toml を触らずに済むよう、
+# まだ使っていないもの（aws-sdk-ec2・hmac など）も先に入れてある。
+[dependencies]
+anyhow = "1.0.105"
+async-trait = "0.1.92"
+aws-config = { version = "1.13.3", features = ["behavior-version-latest"] }
+aws-sdk-ec2 = "1.283.0"
+axum = "0.8.9"
+axum-extra = { version = "0.12.6", features = ["cookie"] }
+base64 = "0.23.1"
+bcrypt = "0.19.3"
+bytes = "1.12.2"
+clap = { version = "4.6.9", features = ["derive"] }
+dotenvy = "0.15.7"
+hex = "0.4.3"
+hmac = "0.13.0"
+http-body-util = "0.1.5"
+rand = "0.10.4"
+# OpenSSL に頼らないよう rustls を使う（0.13 から機能名が rustls-tls → rustls に変わった）
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "json", "form", "query", "http2"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+# MySQL・PostgreSQL のドライバを入れないよう、既定の機能を切っている
+sqlx = { version = "0.9.1", default-features = false, features = ["sqlite", "runtime-tokio", "migrate", "macros"] }
+subtle = "2.6.1"
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["full"] }
+tower = { version = "0.5.3", features = ["util"] }
+tower-http = { version = "0.7.1", features = ["trace", "timeout", "limit"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"
+wiremock = "0.6.5"
