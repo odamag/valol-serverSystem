@@ -37,9 +37,15 @@ point_current() {
 }
 
 # 反映（restart は Rust のバイナリがあるときだけ。段階 1 では PHP と Caddy だけ）
+# バイナリの無いリリース（段階 1 のもの）に戻したときは、Rust を止める。止めないと、
+# systemd が無いファイルを 3 秒ごとに起動しようとして 203/EXEC を延々と繰り返す。
+# 止められなくても切り替えそのものは失敗にしない（sudoers が古い VPS でも戻せるように）。
 apply() {
   if [ -x "$ROOT/current/bin/serversystem" ]; then
     sudo systemctl restart serversystem
+  else
+    sudo -n systemctl stop serversystem \
+      || echo "Rust のサービスを止められませんでした（sudoers を確かめてください）" >&2
   fi
   sudo systemctl reload caddy
 }

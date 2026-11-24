@@ -250,17 +250,19 @@ GitHub Actions (ubuntu-24.04)
 
 1. リリースの中に PHP の設定ファイルへのシンボリックリンクを張る（移行中だけ）。
 2. `current` を新しいリリースに向ける（`ln -sfn` で、一瞬で入れ替わる）。
-3. `sudo systemctl restart serversystem`（マイグレーションは起動のときに流れる）。
+3. `sudo systemctl restart serversystem`（マイグレーションは起動のときに流れる）。リリースに Rust のバイナリが無いとき（段階 1 のリリースに戻したときなど）は、かわりに `sudo systemctl stop serversystem` で止める（止めないと systemd が無いファイルを 3 秒ごとに起動しようとして、203/EXEC を延々と繰り返す）。
 4. `sudo systemctl reload caddy`。
 5. `curl -fsS http://127.0.0.1:8081/api/v1/health` を最大 10 秒待つ。
 6. 失敗したら `current` を前のリリースに戻し、もう一度 restart・reload して、**失敗で終わる**（Actions が赤くなる）。
 7. 古いリリースを消して、直近 5 つだけ残す。
 
-`deploy` ユーザーの sudo は、次の 2 つだけに絞る（`/etc/sudoers.d/deploy`）:
+`deploy` ユーザーの sudo は、次の 3 つだけに絞る（`/etc/sudoers.d/deploy`）:
 
 ```
-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart serversystem, /usr/bin/systemctl reload caddy
+deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart serversystem, /usr/bin/systemctl stop serversystem, /usr/bin/systemctl reload caddy
 ```
+
+`activate.sh` と `sudoers/deploy` はデプロイのたびには置き換わらない（`setup.sh` が置く）。変えたら `setup.sh` を流し直す。
 
 ### 戻し方
 
