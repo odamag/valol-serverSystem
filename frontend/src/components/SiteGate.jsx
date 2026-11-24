@@ -1,47 +1,20 @@
 import { useState, useEffect } from 'react'
 
-const SITE_TOKEN_KEY = 'siteDeviceToken'
+// 旧実装が localStorage に置いていたデバイストークンのキー。今は Cookie に統合したので、起動時に消す。
+const LEGACY_SITE_TOKEN_KEY = 'siteDeviceToken'
 
 export default function SiteGate({ children }) {
-  // 'checking' | 'device_checking' | 'authenticated' | 'unauthenticated'
+  // 'checking' | 'authenticated' | 'unauthenticated'
   const [status, setStatus] = useState('checking')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    // ① まずセッションが生きているか確認
-    fetch('/api/auth/site_status.php', { credentials: 'include' })
+    try { localStorage.removeItem(LEGACY_SITE_TOKEN_KEY) } catch { /* 無視 */ }
+    fetch('/api/v1/site/status', { credentials: 'include' })
       .then(r => r.json())
-      .then(data => {
-        if (data.authenticated) {
-          setStatus('authenticated')
-          return
-        }
-        // ② セッションなし → localStorageのデバイストークンを試みる
-        const token = localStorage.getItem(SITE_TOKEN_KEY)
-        if (!token) {
-          setStatus('unauthenticated')
-          return
-        }
-        setStatus('device_checking')
-        fetch('/api/auth/site_device_login.php', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ deviceToken: token }),
-        })
-          .then(r => r.json())
-          .then(d => {
-            if (d.success) {
-              setStatus('authenticated')
-            } else {
-              localStorage.removeItem(SITE_TOKEN_KEY)
-              setStatus('unauthenticated')
-            }
-          })
-          .catch(() => setStatus('unauthenticated'))
-      })
+      .then(data => setStatus(data.authenticated ? 'authenticated' : 'unauthenticated'))
       .catch(() => setStatus('unauthenticated'))
   }, [])
 
@@ -50,17 +23,15 @@ export default function SiteGate({ children }) {
     setError('')
     setLoading(true)
     try {
-      const res = await fetch('/api/auth/site_login.php', {
+      const res = await fetch('/api/v1/site/login', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password }),
       })
-      const data = await res.json()
-      if (data.success) {
-        if (data.deviceToken) {
-          localStorage.setItem(SITE_TOKEN_KEY, data.deviceToken)
-        }
+      // 401（合言葉違い）・429（回数制限）は返ってきた message をそのまま出す
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data.success) {
         setStatus('authenticated')
       } else {
         setError(data.message ?? '認証に失敗しました')
@@ -76,14 +47,14 @@ export default function SiteGate({ children }) {
     return children
   }
 
-  if (status === 'checking' || status === 'device_checking') {
+  if (status === 'checking') {
     return (
       <div className="auth-page">
         <div className="auth-card">
           <div className="auth-logo">🔒</div>
           <h1 className="auth-title">接続確認中</h1>
           <p className="auth-subtitle">
-            {status === 'device_checking' ? 'デバイスを認証中...' : '確認中...'}
+            確認中...
           </p>
           <div style={{ display: 'flex', justifyContent: 'center', margin: '1.5rem 0' }}>
             <div className="loading-spinner" />

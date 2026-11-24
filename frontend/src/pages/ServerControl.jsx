@@ -92,7 +92,7 @@ export default function ServerControl() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch('/api/server/status.php', { credentials: 'include' })
+      const res = await fetch('/api/v1/servers', { credentials: 'include' })
       if (res.status === 401) {
         setUnauthorized(true)
         return
@@ -122,18 +122,17 @@ export default function ServerControl() {
     return () => clearInterval(interval)
   }, [fetchStatus, unauthorized])
 
-  async function handleAction(action, target, instanceId) {
+  async function handleAction(action, target) {
     if (action === 'start' && Notification.permission === 'default') {
       await Notification.requestPermission()
     }
     setActionLoading(true)
     setMessage('')
     try {
-      const res = await fetch('/api/server/control.php', {
+      // 停止対象はサーバー側が決める（instanceId は送らない）。ボディなし。
+      const res = await fetch(`/api/v1/servers/${encodeURIComponent(target)}/${action}`, {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, target, instanceId }),
       })
       if (res.status === 401) {
         setUnauthorized(true)
