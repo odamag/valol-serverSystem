@@ -4,7 +4,6 @@ import { isSafeInternalPath } from './lib/urlSafety.js'
 import Layout from './components/Layout.jsx'
 import SiteGate from './components/SiteGate.jsx'
 import Login from './pages/Login.jsx'
-import Register from './pages/Register.jsx'
 import ServerControl from './pages/ServerControl.jsx'
 import MiniGames from './pages/MiniGames.jsx'
 import Profile from './pages/Profile.jsx'
@@ -45,11 +44,13 @@ function PostLoginRedirect() {
   return null
 }
 
-function App() {
+// 合言葉を通ったあとに描画する本体。/api/v1/auth/status は合言葉が必要なので、
+// SiteGate の内側で呼ぶ（外で呼ぶと 401 になる）。
+function AppInner() {
   const [auth, setAuth] = useState({ loading: true, loggedIn: false, username: null, userId: null })
 
   useEffect(() => {
-    fetch('/api/auth/status.php', { credentials: 'include' })
+    fetch('/api/v1/auth/status', { credentials: 'include' })
       .then(r => r.json())
       .then(data => setAuth({ loading: false, ...data }))
       .catch(() => setAuth({ loading: false, loggedIn: false }))
@@ -65,13 +66,11 @@ function App() {
   }
 
   return (
-    <SiteGate>
-      <AuthContext.Provider value={{ auth, setAuth }}>
+    <AuthContext.Provider value={{ auth, setAuth }}>
         <BrowserRouter>
           <PostLoginRedirect />
           <Routes>
             <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
             <Route path="/" element={<Layout />}>
               <Route index element={<Navigate to="/server" replace />} />
               <Route path="server" element={<ServerControl />} />
@@ -98,7 +97,14 @@ function App() {
             <Route path="*" element={<Navigate to="/server" replace />} />
           </Routes>
         </BrowserRouter>
-      </AuthContext.Provider>
+    </AuthContext.Provider>
+  )
+}
+
+function App() {
+  return (
+    <SiteGate>
+      <AppInner />
     </SiteGate>
   )
 }

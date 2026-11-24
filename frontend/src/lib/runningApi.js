@@ -1,26 +1,11 @@
 // Running API 用の共通 fetch ラッパ。arenaApi.js の複製。
-// 本番ではサブディレクトリの .htaccess によるリライトで /api/running/v1/... を
-// 直接叩けるが、PHPビルトインサーバー（.htaccessを読まない）やリライトが
-// 効かない環境向けのフォールバックとして index.php?path=... 形式も選べるようにする。
-// 切り替えは下の定数1つだけで行う。
-const RUNNING_USE_PATH_FALLBACK = true
-
-const RUNNING_REWRITE_BASE = '/api/running/v1'
-const RUNNING_FALLBACK_BASE = '/api/running/index.php'
+// 呼び出し側は "/v1/..." のパスを渡し、ここで /api/v1/running/... に変換する。
+const RUNNING_BASE = '/api/v1/running'
 
 // path は "/v1/records" や "/v1/records?limit=5" のように必ず /v1 から始まる。
-// フォールバック時はクエリ文字列を分離し、?path=<パス本体>&<残りのクエリ> の形にする
-// （すべてまとめて path= に詰めると PHP 側の $_GET が個別のクエリを拾えなくなるため）。
+// Rust 側は /api/v1/running/<X> をそのまま AWS の /v1/<X> へ中継する。
 function buildUrl(path) {
-  if (!RUNNING_USE_PATH_FALLBACK) {
-    return path.replace(/^\/v1/, RUNNING_REWRITE_BASE)
-  }
-  const qIndex = path.indexOf('?')
-  const pathOnly = qIndex === -1 ? path : path.slice(0, qIndex)
-  const query = qIndex === -1 ? '' : path.slice(qIndex + 1)
-  const params = new URLSearchParams(query)
-  params.set('path', pathOnly)
-  return `${RUNNING_FALLBACK_BASE}?${params.toString()}`
+  return path.replace(/^\/v1/, RUNNING_BASE)
 }
 
 // Running API 呼び出しの共通エラー。サーバーが返した日本語メッセージを保持する。

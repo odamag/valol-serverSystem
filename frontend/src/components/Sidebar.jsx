@@ -13,7 +13,7 @@ export default function Sidebar({ isOpen, onClose }) {
   const { auth, setAuth } = useAuth()
 
   async function handleLogout() {
-    await fetch('/api/auth/logout.php', { method: 'POST', credentials: 'include' })
+    await fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'include' })
     setAuth({ loading: false, loggedIn: false, username: null, userId: null })
     onClose?.()
   }

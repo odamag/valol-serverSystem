@@ -6,7 +6,7 @@ export default function Profile() {
   async function handleDelete() {
     if (!confirm('本当にアカウントを削除しますか？この操作は取り消せません。')) return
     try {
-      const res = await fetch('/api/auth/profile.php', {
+      const res = await fetch('/api/v1/me', {
         method: 'DELETE',
         credentials: 'include',
       })

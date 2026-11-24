@@ -157,7 +157,7 @@ export default function LoLStreak() {
       {!loading && !error && data.length === 0 && (
         <div className="lol-empty">
           メンバーが登録されていません。<br />
-          <span style={{ fontSize: '0.85rem' }}>api/lol/config.php の members にRiot IDを追加してください。</span>
+          <span style={{ fontSize: '0.85rem' }}>VPS の /etc/serversystem/env の LOL_MEMBERS に Riot ID（名前#タグ）を追加してください。</span>
         </div>
       )}
 
