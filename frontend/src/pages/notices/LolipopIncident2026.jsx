@@ -23,8 +23,8 @@ export default function LolipopIncident2026() {
 
         <h4>旧サーバーに保存されていた情報</h4>
         <ul>
-          <li>ログイン ID、表示名</li>
-          <li>Discord のユーザー ID（Discord ログインに使用）</li>
+          <li>当サイトのログイン ID（以前の OTP 方式で使っていたもの）、表示名（Discord の表示名またはユーザー名）</li>
+          <li>Discord のユーザー ID（アカウントを区別するための数字の ID です。Discord へのログインには使えません）</li>
           <li>LoL・VALORANT の予想、Arena の対戦などの利用履歴（ユーザー名つき）</li>
           <li>以前 OTP ログインを利用していた方の、OTP 認証用の秘密鍵</li>
           <li>サイトに入るための合言葉（※）</li>
@@ -37,10 +37,11 @@ export default function LolipopIncident2026() {
         <ul>
           <li>氏名、住所、電話番号、メールアドレス、生年月日</li>
           <li>クレジットカード・銀行口座などの決済情報</li>
-          <li>Discord のパスワード、アクセストークン</li>
+          <li><strong>Discord へのログインに使う情報（メールアドレス・電話番号・パスワード）</strong>、および認証に使うアクセストークン</li>
         </ul>
         <p>
-          Discord ログインは OAuth 認証です。パスワードは当サイトには届かず、認証に使ったトークンも保存していません。
+          当サイトの Discord ログインは OAuth 認証です。Discord のログイン画面は Discord 自身が表示するもので、そこで入力したメールアドレス・電話番号・パスワードは当サイトには届きません。当サイトが保存しているのは Discord のユーザー ID と表示名だけで、認証に使ったトークンも保存していません。
+          <strong>当サイトの情報から、皆さまの Discord アカウントにログインされることはありません。</strong>
         </p>
 
         <h3>3. 当サイトの対応（すべて完了しています）</h3>
