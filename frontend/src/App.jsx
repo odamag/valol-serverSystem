@@ -12,6 +12,7 @@ import LoLStreak from './pages/LoLStreak.jsx'
 import RunningHome from './pages/RunningHome.jsx'
 import RunningRanking from './pages/RunningRanking.jsx'
 import RunningRecords from './pages/RunningRecords.jsx'
+import LolipopIncident2026, { LOLIPOP_INCIDENT_PATH } from './pages/notices/LolipopIncident2026.jsx'
 
 export const AuthContext = createContext(null)
 
@@ -102,6 +103,11 @@ function AppInner() {
 }
 
 function App() {
+  // お知らせは、新しい合言葉を知らない人にも読めるよう合言葉の外で出す（API も呼ばない静的なページ）
+  if (window.location.pathname.replace(/\/+$/, '') === LOLIPOP_INCIDENT_PATH) {
+    return <LolipopIncident2026 />
+  }
+
   return (
     <SiteGate>
       <AppInner />

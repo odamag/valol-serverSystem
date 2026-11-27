@@ -1,3 +1,5 @@
+import { LOLIPOP_INCIDENT_PATH } from './notices/LolipopIncident2026.jsx'
+
 const infoLinks = [
   {
     href: 'https://www.notion.so/Minecraft-Server-2fcb31a2feb68015b9f5fc19b6cf793f?source=copy_link',
@@ -6,69 +8,6 @@ const infoLinks = [
     description: 'サーバーのルール・設定・MODなどをまとめたノーションページ。',
   },
 ]
-
-// 2026-11 のロリポップ!レンタルサーバーへの不正アクセスについてのお知らせ
-function LolipopIncidentNotice() {
-  return (
-    <article className="card notice-card">
-      <p className="notice-date">2026年11月27日</p>
-      <h2 className="notice-title">ロリポップ!レンタルサーバーの不正アクセスについて</h2>
-
-      <h3>1. 概要</h3>
-      <p>
-        2026年11月27日、当サイトが以前利用していたレンタルサーバー「ロリポップ!レンタルサーバー」（GMOペパボ株式会社）で、第三者による不正アクセスがあったと公表されました。ペパボの発表では、同社の内部システム（データ分析基盤）が不正アクセスを受け、同社の顧客情報が外部に持ち出されたとのことです。
-      </p>
-      <p>当サイトはすでに別のサーバーへ移行しており、旧サーバーは新しい URL への転送のみに使っていました。</p>
-
-      <h3>2. 当サイトの情報への影響</h3>
-      <p>
-        <strong>現時点で、当サイトのデータが漏えいしたという事実は確認していません。</strong>
-        ただし、ペパボはサーバー上のお客様のデータへの影響を調査中としています。そのため、旧サーバーに残っていた情報は、漏えいした可能性があるものとして対応しました。
-      </p>
-
-      <h4>旧サーバーに保存されていた情報</h4>
-      <ul>
-        <li>ログイン ID、表示名</li>
-        <li>Discord のユーザー ID（Discord ログインに使用）</li>
-        <li>LoL・VALORANT の予想、Arena の対戦などの利用履歴（ユーザー名つき）</li>
-        <li>以前 OTP ログインを利用していた方の、OTP 認証用の秘密鍵</li>
-        <li>サイトに入るための合言葉（※）</li>
-      </ul>
-      <p className="notice-note">
-        ※ 合言葉は、以前ロリポップの Basic 認証で使っていたものと同じでした。ペパボの発表では、Basic 認証のパスワードも漏えいの対象に含まれています。
-      </p>
-
-      <h4>保存していない情報</h4>
-      <ul>
-        <li>氏名、住所、電話番号、メールアドレス、生年月日</li>
-        <li>クレジットカード・銀行口座などの決済情報</li>
-        <li>Discord のパスワード、アクセストークン</li>
-      </ul>
-      <p>
-        Discord ログインは OAuth 認証です。パスワードは当サイトには届かず、認証に使ったトークンも保存していません。
-      </p>
-
-      <h3>3. 当サイトの対応（すべて完了しています）</h3>
-      <ul>
-        <li>サイトの合言葉を変更し、旧合言葉で認証済みの端末を全て無効化しました。</li>
-        <li>外部サービス（AWS、Discord、Riot Games など）との連携に使うキーを、再発行または無効化しました。</li>
-        <li>旧サーバーに残っていたデータを全て削除しました。OTP 認証は廃止済みで、現在のサイトでは使用していません。</li>
-        <li>旧サーバーの接続情報を変更し、不要になった設定を削除しました。</li>
-      </ul>
-
-      <h3>4. お願い</h3>
-      <ul>
-        <li>以前の合言葉と同じパスワードを、他のサービスで使っている方は、そちらも変更してください。</li>
-        <li>以前 OTP ログインを利用していた方へ。同じ秘密鍵を他のサービスに登録していた場合は、そちらを再設定してください。</li>
-        <li>不審なメール、DM、SMS にご注意ください。当サイトから、パスワードなどを尋ねることはありません。</li>
-      </ul>
-
-      <h3>5. 今後</h3>
-      <p>ペパボの調査結果により、当サイトへの影響が新たに分かった場合は、本ページに追記します。</p>
-      <p>ご不明な点は、Discord で管理者までご連絡ください。</p>
-    </article>
-  )
-}
 
 export default function Info() {
   return (
@@ -80,7 +19,11 @@ export default function Info() {
 
       <section className="notice-section">
         <h2 className="notice-section-title">📢 お知らせ</h2>
-        <LolipopIncidentNotice />
+        {/* 合言葉の外に置いたページなので、ルーターの中の遷移ではなく普通のリンクで開く */}
+        <a href={LOLIPOP_INCIDENT_PATH} className="notice-link">
+          <span className="notice-date">2026年11月27日</span>
+          <span className="notice-link-title">ロリポップ!レンタルサーバーの不正アクセスについて</span>
+        </a>
       </section>
 
       <div className="games-grid">
