@@ -72,6 +72,10 @@ export default function SiteGate({ children }) {
         <h1 className="auth-title">アクセス制限</h1>
         <p className="auth-subtitle">サイトパスワードを入力してください</p>
 
+        <div className="alert alert-info">
+          2026年11月27日に合言葉を変更しました。新しい合言葉は管理者から個別にお伝えします。詳しくは、入室後の「情報」ページのお知らせをご覧ください。
+        </div>
+
         {error && <div className="alert alert-error">{error}</div>}
 
         <form onSubmit={handleSubmit}>
