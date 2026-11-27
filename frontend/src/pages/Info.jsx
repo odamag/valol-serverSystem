@@ -1,3 +1,5 @@
+import { LOLIPOP_INCIDENT_PATH } from './notices/LolipopIncident2026.jsx'
+
 const infoLinks = [
   {
     href: 'https://www.notion.so/Minecraft-Server-2fcb31a2feb68015b9f5fc19b6cf793f?source=copy_link',
@@ -14,6 +16,15 @@ export default function Info() {
         <h1 className="page-title">📋 情報</h1>
         <p className="page-subtitle">サーバーやゲームに関する情報リンク集</p>
       </div>
+
+      <section className="notice-section">
+        <h2 className="notice-section-title">📢 お知らせ</h2>
+        {/* 合言葉の外に置いたページなので、ルーターの中の遷移ではなく普通のリンクで開く */}
+        <a href={LOLIPOP_INCIDENT_PATH} className="notice-link">
+          <span className="notice-date">2026年11月27日</span>
+          <span className="notice-link-title">ロリポップ!レンタルサーバーの不正アクセスについて</span>
+        </a>
+      </section>
 
       <div className="games-grid">
         {infoLinks.map(link => (

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { LOLIPOP_INCIDENT_PATH } from '../pages/notices/LolipopIncident2026.jsx'
 
 // 旧実装が localStorage に置いていたデバイストークンのキー。今は Cookie に統合したので、起動時に消す。
 const LEGACY_SITE_TOKEN_KEY = 'siteDeviceToken'
@@ -71,6 +72,11 @@ export default function SiteGate({ children }) {
         <div className="auth-logo">🔒</div>
         <h1 className="auth-title">アクセス制限</h1>
         <p className="auth-subtitle">サイトパスワードを入力してください</p>
+
+        <div className="alert alert-info">
+          2026年11月27日に合言葉を変更しました。新しい合言葉は管理者から個別にお伝えします。
+          {' '}<a href={LOLIPOP_INCIDENT_PATH}>お知らせを読む</a>
+        </div>
 
         {error && <div className="alert alert-error">{error}</div>}
 
