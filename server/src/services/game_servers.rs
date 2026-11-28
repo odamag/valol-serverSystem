@@ -13,6 +13,9 @@ use aws_sdk_ec2::types::{
     LaunchTemplateSpecification, MarketType, ResourceType, SpotInstanceType, SpotMarketOptions,
     Tag, TagSpecification,
 };
+use aws_sdk_route53::types::{
+    Change, ChangeAction, ChangeBatch, ResourceRecord, ResourceRecordSet, RrType,
+};
 use serde_json::{Value, json};
 
 use crate::config::Config;
@@ -63,6 +66,58 @@ pub struct InstanceInfo {
     pub state: String,
     pub public_ip: Option<String>,
     pub game_status: Option<String>,
+}
+
+/// DNS の A レコードの書き換え口。テストでは偽物を差し込む。本物は `Route53Updater`。
+#[async_trait]
+pub trait DnsUpdater: Send + Sync {
+    /// ゾーン `zone_id` の `name` の A レコードを `ip` 1 つに UPSERT する。
+    async fn upsert_a(&self, zone_id: &str, name: &str, ip: &str) -> anyhow::Result<()>;
+}
+
+/// DNS の TTL（秒）。IP が変わってから仲間に届くまでを短くするため 60。
+const DNS_TTL_SECS: i64 = 60;
+
+/// 本物の Route 53。認証情報は `Ec2Backend` と同じ。
+pub struct Route53Updater {
+    client: aws_sdk_route53::Client,
+}
+
+impl Route53Updater {
+    pub async fn new(config: &Config) -> anyhow::Result<Self> {
+        // Route 53 はグローバルなサービスだが、署名に使うリージョンは他と同じ設定のままでよい
+        let sdk = aws_config::defaults(aws_config::BehaviorVersion::latest())
+            .region(aws_config::Region::new(config.aws_region.clone()))
+            .load()
+            .await;
+        Ok(Self {
+            client: aws_sdk_route53::Client::new(&sdk),
+        })
+    }
+}
+
+#[async_trait]
+impl DnsUpdater for Route53Updater {
+    async fn upsert_a(&self, zone_id: &str, name: &str, ip: &str) -> anyhow::Result<()> {
+        let record = ResourceRecordSet::builder()
+            .name(name)
+            .r#type(RrType::A)
+            .ttl(DNS_TTL_SECS)
+            .resource_records(ResourceRecord::builder().value(ip).build()?)
+            .build()?;
+        let change = Change::builder()
+            .action(ChangeAction::Upsert)
+            .resource_record_set(record)
+            .build()?;
+        self.client
+            .change_resource_record_sets()
+            .hosted_zone_id(zone_id)
+            .change_batch(ChangeBatch::builder().changes(change).build()?)
+            .send()
+            .await
+            .map_err(describe_error)?;
+        Ok(())
+    }
 }
 
 /// 本物の EC2。認証情報は環境変数（`AWS_ACCESS_KEY_ID` など）から aws-config が読む。
@@ -208,6 +263,12 @@ pub struct GameServerService {
     op_guards: HashMap<&'static str, tokio::sync::Mutex<()>>,
     /// 状態のキャッシュ：(取得した時刻, 応答)
     cache: Mutex<Option<(i64, Value)>>,
+    /// DNS の書き換え口。機能オフなら持たない。
+    dns: Option<Arc<dyn DnsUpdater>>,
+    dns_name: String,
+    dns_zone_id: String,
+    /// 最後に DNS へ書いた IP。再起動で消えてよい（次の status で 1 回書き直すだけ）。
+    last_dns_ip: Mutex<Option<String>>,
 }
 
 fn find_def(target: &str) -> Option<&'static ServerDef> {
@@ -225,6 +286,55 @@ impl GameServerService {
                 .map(|d| (d.key, tokio::sync::Mutex::new(())))
                 .collect(),
             cache: Mutex::new(None),
+            dns: None,
+            dns_name: config.minecraft_dns_name.clone(),
+            dns_zone_id: config.route53_hosted_zone_id.clone(),
+            last_dns_ip: Mutex::new(None),
+        }
+    }
+
+    /// DNS の書き換え口を付ける。設定の 2 項目が空なら付けても使わない（機能オフ）。
+    pub fn with_dns(mut self, dns: Arc<dyn DnsUpdater>) -> Self {
+        self.dns = Some(dns);
+        self
+    }
+
+    /// 機能オンなら書き換え口を返す。
+    fn dns_enabled(&self) -> Option<&Arc<dyn DnsUpdater>> {
+        if self.dns_name.is_empty() || self.dns_zone_id.is_empty() {
+            return None;
+        }
+        self.dns.as_ref()
+    }
+
+    /// running で IP があり、最後に書いた IP と違えば DNS を書き換える。
+    /// 失敗しても status は失敗させない（ログに残し、次の status でやり直す）。
+    async fn sync_dns(&self, found: &Option<InstanceInfo>) {
+        let Some(dns) = self.dns_enabled() else {
+            return;
+        };
+        let Some(i) = found else { return };
+        let Some(ip) = i.public_ip.as_deref().filter(|ip| !ip.is_empty()) else {
+            return;
+        };
+        if i.state != "running" || self.last_dns_ip.lock().expect("dns").as_deref() == Some(ip) {
+            return;
+        }
+        match dns.upsert_a(&self.dns_zone_id, &self.dns_name, ip).await {
+            Ok(()) => *self.last_dns_ip.lock().expect("dns") = Some(ip.to_owned()),
+            Err(e) => tracing::error!(error = format!("{e:#}"), "DNS の書き換えに失敗"),
+        }
+    }
+
+    /// 応答に入れる接続先の名前。名前がもう今の IP を指しているときだけ DNS 名、それ以外は空。
+    fn host_for(&self, found: &Option<InstanceInfo>) -> String {
+        if self.dns_enabled().is_none() {
+            return String::new();
+        }
+        let ip = found.as_ref().and_then(|i| i.public_ip.as_deref());
+        match (ip, self.last_dns_ip.lock().expect("dns").as_deref()) {
+            (Some(a), Some(b)) if a == b => self.dns_name.clone(),
+            _ => String::new(),
         }
     }
 
@@ -273,7 +383,13 @@ impl GameServerService {
                 }
             };
             let lock_active = self.lock_active(def.key, now);
-            servers.insert(def.key.to_owned(), entry_json(def, found, lock_active));
+            // 今は minecraft だけなので DNS 名も 1 つ。ゲームを足すときはここも分ける
+            self.sync_dns(&found).await;
+            let host = self.host_for(&found);
+            servers.insert(
+                def.key.to_owned(),
+                entry_json(def, found, lock_active, host),
+            );
         }
         let message = if failed { STATUS_ERROR_MESSAGE } else { "" };
         let value = json!({ "servers": servers, "message": message });
@@ -354,7 +470,12 @@ impl GameServerService {
 }
 
 /// 1 台分の応答。`displayState` の決め方は設計書 10 §6.6 の表のとおり。
-fn entry_json(def: &ServerDef, found: Option<InstanceInfo>, lock_active: bool) -> Value {
+fn entry_json(
+    def: &ServerDef,
+    found: Option<InstanceInfo>,
+    lock_active: bool,
+    host: String,
+) -> Value {
     let (state, display, ip, id, gs) = match found {
         Some(i) => {
             let gs = i.game_status.unwrap_or_default();
@@ -390,6 +511,7 @@ fn entry_json(def: &ServerDef, found: Option<InstanceInfo>, lock_active: bool) -
         "state": state,
         "displayState": display,
         "ip": ip,
+        "host": host,
         "instanceId": id,
         "gameStatus": gs,
     })

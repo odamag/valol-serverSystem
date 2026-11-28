@@ -11,6 +11,7 @@ anyhow = "1.0.105"
 async-trait = "0.1.92"
 aws-config = { version = "1.13.3", features = ["behavior-version-latest"] }
 aws-sdk-ec2 = "1.283.0"
+aws-sdk-route53 = "1.139.0"
 axum = "0.8.9"
 axum-extra = { version = "0.12.6", features = ["cookie"] }
 base64 = "0.23.1"
