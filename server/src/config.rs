@@ -53,6 +53,10 @@ pub struct Config {
     pub aws_region: String,
     /// `EC2_LT_MINECRAFT`（起動テンプレート ID）
     pub ec2_lt_minecraft: String,
+    /// `MINECRAFT_DNS_NAME`（例 `mc.valolbeta.com`。小文字・末尾の `.` なし。空なら DNS を書き換えない）
+    pub minecraft_dns_name: String,
+    /// `ROUTE53_HOSTED_ZONE_ID`（先頭の `/hostedzone/` は取り除いてある。空なら DNS を書き換えない）
+    pub route53_hosted_zone_id: String,
     /// `RIOT_API_KEY`
     pub riot_api_key: String,
     /// `LOL_MEMBERS`（`名前#JP1,名前2#TAG`）
@@ -118,6 +122,25 @@ impl Config {
         let aws_secret_access_key = r.required("AWS_SECRET_ACCESS_KEY");
         let aws_region = r.required("AWS_REGION");
         let ec2_lt_minecraft = r.required("EC2_LT_MINECRAFT");
+        // DNS の 2 項目は、両方書くか両方空にするか。片方だけだと動かない理由が分かりにくいので止める
+        let minecraft_dns_name = r
+            .optional("MINECRAFT_DNS_NAME")
+            .map(|v| v.trim_end_matches('.').to_ascii_lowercase())
+            .unwrap_or_default();
+        let route53_hosted_zone_id = r
+            .optional("ROUTE53_HOSTED_ZONE_ID")
+            .map(|v| {
+                v.strip_prefix("/hostedzone/")
+                    .map(str::to_owned)
+                    .unwrap_or(v)
+            })
+            .unwrap_or_default();
+        if minecraft_dns_name.is_empty() != route53_hosted_zone_id.is_empty() {
+            r.invalid.push(
+                "MINECRAFT_DNS_NAME と ROUTE53_HOSTED_ZONE_ID（両方書くか、両方空にする）"
+                    .to_owned(),
+            );
+        }
         let riot_api_key = r.required("RIOT_API_KEY");
         let lol_members = match r.required("LOL_MEMBERS") {
             Some(raw) => match parse_lol_members(&raw) {
@@ -182,6 +205,8 @@ impl Config {
             aws_secret_access_key: aws_secret_access_key.expect("検査済み"),
             aws_region: aws_region.expect("検査済み"),
             ec2_lt_minecraft: ec2_lt_minecraft.expect("検査済み"),
+            minecraft_dns_name,
+            route53_hosted_zone_id,
             riot_api_key: riot_api_key.expect("検査済み"),
             lol_members: lol_members.expect("検査済み"),
             running_api_base: running_api_base.expect("検査済み"),
@@ -211,6 +236,8 @@ impl Config {
             aws_secret_access_key: "test-secret".to_owned(),
             aws_region: "ap-northeast-1".to_owned(),
             ec2_lt_minecraft: "lt-test".to_owned(),
+            minecraft_dns_name: String::new(),
+            route53_hosted_zone_id: String::new(),
             riot_api_key: "RGAPI-test".to_owned(),
             lol_members: vec![LolMember {
                 name: "テスト".to_owned(),
@@ -245,6 +272,8 @@ impl fmt::Debug for Config {
             .field("aws_secret_access_key", &HIDDEN)
             .field("aws_region", &self.aws_region)
             .field("ec2_lt_minecraft", &self.ec2_lt_minecraft)
+            .field("minecraft_dns_name", &self.minecraft_dns_name)
+            .field("route53_hosted_zone_id", &self.route53_hosted_zone_id)
             .field("riot_api_key", &HIDDEN)
             .field("lol_members", &self.lol_members)
             .field("running_api_base", &self.running_api_base)
@@ -412,6 +441,33 @@ mod tests {
         assert!(err.contains("APP_SITE_GATE_ENABLED"));
         assert!(err.contains("RUNNING_TIMEOUT_SECS"));
         assert!(err.contains("LOL_MEMBERS"));
+    }
+
+    #[test]
+    fn dns_settings_are_off_when_both_empty() {
+        let c = load(&full_env()).unwrap();
+        assert_eq!(c.minecraft_dns_name, "");
+        assert_eq!(c.route53_hosted_zone_id, "");
+    }
+
+    #[test]
+    fn dns_settings_are_normalized() {
+        let mut env = full_env();
+        env.insert("MINECRAFT_DNS_NAME", "MC.Valolbeta.com.");
+        env.insert("ROUTE53_HOSTED_ZONE_ID", "/hostedzone/Z0123456789ABC");
+        let c = load(&env).unwrap();
+        assert_eq!(c.minecraft_dns_name, "mc.valolbeta.com");
+        assert_eq!(c.route53_hosted_zone_id, "Z0123456789ABC");
+    }
+
+    #[test]
+    fn dns_settings_with_only_one_side_are_an_error() {
+        for key in ["MINECRAFT_DNS_NAME", "ROUTE53_HOSTED_ZONE_ID"] {
+            let mut env = full_env();
+            env.insert(key, "x");
+            let err = load(&env).unwrap_err().to_string();
+            assert!(err.contains("ROUTE53_HOSTED_ZONE_ID"), "{err}");
+        }
     }
 
     #[test]

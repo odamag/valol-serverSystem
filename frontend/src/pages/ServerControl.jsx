@@ -8,11 +8,17 @@ const STATUS_LABELS = {
   stopped: { label: '停止中',             cls: 'stopped' },
 }
 
+// 接続先の表示。名前（host）があれば名前だけ（25565 は既定のポートなので省く）、無ければ ip:port
+function connectTarget(server) {
+  const addr = server.host || server.ip
+  return server.host && server.port === 25565 ? addr : `${addr}:${server.port}`
+}
+
 function ServerCard({ serverKey, server, onAction, actionLoading }) {
   const { label, cls } = STATUS_LABELS[server.displayState] ?? STATUS_LABELS.stopped
 
   async function copyIp() {
-    const text = `${server.ip}:${server.port}`
+    const text = connectTarget(server)
     await navigator.clipboard.writeText(text)
     alert(`コピーしました: ${text}`)
   }
@@ -27,9 +33,9 @@ function ServerCard({ serverKey, server, onAction, actionLoading }) {
 
         {server.displayState === 'ready' && (
           <>
-            <p className="server-info-text">IPをタップしてコピー</p>
+            <p className="server-info-text">接続先をタップしてコピー</p>
             <div className="ip-box" onClick={copyIp} role="button" tabIndex={0}>
-              <span>{server.ip}:{server.port}</span>
+              <span>{connectTarget(server)}</span>
               <span className="ip-copy-hint">📋 コピー</span>
             </div>
             <button
@@ -85,7 +91,7 @@ export default function ServerControl() {
   function fireNotification(server) {
     if (Notification.permission !== 'granted') return
     new Notification(`${server.name} が起動しました！`, {
-      body: `接続先: ${server.ip}:${server.port}`,
+      body: `接続先: ${connectTarget(server)}`,
       icon: '/favicon.ico',
     })
   }

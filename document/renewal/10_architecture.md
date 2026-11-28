@@ -504,6 +504,10 @@ CREATE TABLE site_passes (
 
 - 起動中ロックは、ロックファイルをやめて**メモリ上**（`Mutex<HashMap<target, 時刻>>`）に持つ。プロセスは 1 つなので足りる。再起動すると消えるが、起動のときに必ず EC2 に問い合わせて重複を確かめるので困らない。「ロックを確かめる → EC2 を確かめる → 起動する」の間は、ターゲットごとの Mutex で 1 つずつしか通さない（同時に 2 回押しても 2 台立たない）。
 - 状態の取得結果は **3 秒キャッシュ**する。複数の人が 5 秒ごとに見ても、AWS への問い合わせは増えない。起動・停止をしたらキャッシュを捨てる。
+- **接続先の名前（`host`）と DNS の書き換え**（`MINECRAFT_DNS_NAME` と `ROUTE53_HOSTED_ZONE_ID` の両方があるときだけ。両方空なら何もせず `host` は常に空）:
+  - 起動のたびに新しい EC2 が立って公開 IP が変わるので、名前（例 `mc.valolbeta.com`）の A レコードを Route 53 に UPSERT する（TTL 60、`DnsUpdater` の後ろに隠す。本物は `Route53Updater`）。
+  - 書くのは `status` の中。インスタンスが `running` で公開 IP があり、それが「最後に DNS に書いた IP」（メモリ上）と違うときだけ。3 秒キャッシュが当たったときは何もしない。失敗してもログに残すだけで `status` は失敗させず、次の `status` でやり直す。再起動で覚えた IP が消えても、次に 1 回書くだけ。
+  - 応答の各サーバーの `host` は、今の公開 IP が「最後に DNS に書いた IP」と同じとき（名前がもう今の IP を指しているとき）だけ DNS 名、それ以外は空文字。画面は `host` があれば `host`（ポートが 25565 以外なら `host:port`）、なければ `ip:port` を出す。
 - 起動のパラメータ（スポット・one-time・中断時 terminate・`Name` と `GameStatus=Booting` のタグ）は今と同じにする。
 - **Minecraft サーバー側との約束**（サーバーの起動構成を変えるときも守る。サーバー側の改修は、このリニューアルとは別に進めてよい）:
   - 起動テンプレートは ID を変えず、AMI などを変えるときは**同じテンプレートの新しい版**にする（サイトは `$Latest` で起動する）。
@@ -606,10 +610,14 @@ impl DiscordOAuth {
     async fn run_from_template(&self, launch_template_id: &str, name_tag: &str) -> anyhow::Result<()>;
     async fn terminate(&self, instance_id: &str) -> anyhow::Result<()>;
 }
+#[async_trait] pub trait DnsUpdater: Send + Sync {                            // 機能オフなら持たない（Option）
+    async fn upsert_a(&self, zone_id: &str, name: &str, ip: &str) -> anyhow::Result<()>;
+}
 pub struct InstanceInfo { pub instance_id: String, pub state: String, pub public_ip: Option<String>, pub game_status: Option<String> }
 pub struct GameServerService { /* backend, 起動テンプレート ID, ロック, キャッシュ */ }
 impl GameServerService {
     pub fn new(backend: Arc<dyn GameServerBackend>, config: &Config) -> Self;
+    pub fn with_dns(self, dns: Arc<dyn DnsUpdater>) -> Self;                   // 本番だけ付ける（§6.6）
     pub async fn status(&self, now: i64) -> AppResult<serde_json::Value>;      // 今の status.php と同じ形
     pub async fn start(&self, target: &str, now: i64) -> AppResult<String>;    // 成功時の message
     pub async fn stop(&self, target: &str) -> AppResult<String>;

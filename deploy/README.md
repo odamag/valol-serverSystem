@@ -80,6 +80,7 @@ sudo nano /etc/serversystem/env
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | IAM ユーザー `serversystem-vps` のアクセスキー（IAM → ユーザー → セキュリティ認証情報 → アクセスキーを作成。権限は 11 の §4 の IAM の節） |
 | `AWS_REGION` | `ap-northeast-1` |
 | `EC2_LT_MINECRAFT` | EC2 → 起動テンプレート → Minecraft のテンプレート ID（`lt-...`） |
+| `MINECRAFT_DNS_NAME`・`ROUTE53_HOSTED_ZONE_ID`（省略可） | Minecraft につなぐ名前（例 `mc.valolbeta.com`）と、その Route 53 のホストゾーン ID（`Z...`）。Minecraft が `running` になると A レコード（TTL 60）を公開 IP に書き換える。**両方空なら DNS を書き換えない**。片方だけだと起動しない。権限は `deploy/iam/` の `UpsertMinecraftRecord` |
 | `RIOT_API_KEY` | Riot Developer Portal → 自分のアプリのキー（今の `lol_config.php` と同じ） |
 | `LOL_MEMBERS` | 戦績を出すメンバー。`名前#タグ` をカンマ区切り |
 | `RUNNING_API_BASE` | ランニングの API Gateway の URL。CDK のデプロイ出力、または AWS コンソールの API Gateway → ステージの「URL を呼び出す」 |

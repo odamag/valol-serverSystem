@@ -16,7 +16,9 @@ use common::{body_json, json_request, site_pass_cookie, test_state, test_state_w
 use serversystem::AppState;
 use serversystem::build_app;
 use serversystem::clock::FixedClock;
-use serversystem::services::game_servers::{GameServerBackend, GameServerService, InstanceInfo};
+use serversystem::services::game_servers::{
+    DnsUpdater, GameServerBackend, GameServerService, InstanceInfo,
+};
 
 #[derive(Default)]
 struct Fake {
@@ -153,7 +155,7 @@ async fn status_json_has_same_shape_as_php() {
         json!({
             "servers": {"minecraft": {
                 "name": "⛏️ Minecraft", "port": 25565, "state": "running",
-                "displayState": "ready", "ip": "203.0.113.5",
+                "displayState": "ready", "ip": "203.0.113.5", "host": "",
                 "instanceId": "i-found", "gameStatus": "Online"
             }},
             "message": ""
@@ -367,4 +369,125 @@ async fn unknown_target_is_404() {
     }
     assert_eq!(fake.run_calls.load(Ordering::SeqCst), 0);
     assert!(fake.terminated.lock().unwrap().is_empty());
+}
+
+// ── DNS の書き換え ──
+
+#[derive(Default)]
+struct FakeDns {
+    calls: Mutex<Vec<(String, String, String)>>,
+    fail: Mutex<bool>,
+}
+
+#[async_trait]
+impl DnsUpdater for FakeDns {
+    async fn upsert_a(&self, zone_id: &str, name: &str, ip: &str) -> anyhow::Result<()> {
+        self.calls
+            .lock()
+            .unwrap()
+            .push((zone_id.to_owned(), name.to_owned(), ip.to_owned()));
+        if *self.fail.lock().unwrap() {
+            anyhow::bail!("AccessDenied: 秘密の Route53 エラー文");
+        }
+        Ok(())
+    }
+}
+
+/// DNS 機能オンの状態。`on` が false なら設定を空のまま（機能オフ）。
+async fn setup_dns(on: bool) -> (AppState, Arc<FixedClock>, Arc<Fake>, Arc<FakeDns>, String) {
+    let (mut state, clock) = test_state_with(|c| {
+        if on {
+            c.minecraft_dns_name = "mc.example.com".to_owned();
+            c.route53_hosted_zone_id = "Z123".to_owned();
+        }
+    })
+    .await;
+    let fake = Arc::new(Fake::default());
+    let dns = Arc::new(FakeDns::default());
+    state.game_servers =
+        Arc::new(GameServerService::new(fake.clone(), &state.config).with_dns(dns.clone()));
+    let pass = site_pass_cookie(&state).await;
+    (state, clock, fake, dns, pass)
+}
+
+async fn host_of(state: &AppState, pass: &str) -> Value {
+    let (st, v) = call(state, "GET", "/api/v1/servers", pass).await;
+    assert_eq!(st, StatusCode::OK);
+    v["servers"]["minecraft"]["host"].clone()
+}
+
+fn inst_ip(state: &str, ip: &str) -> InstanceInfo {
+    InstanceInfo {
+        public_ip: Some(ip.to_owned()),
+        ..inst(state, Some("Online"))
+    }
+}
+
+#[tokio::test]
+async fn dns_is_upserted_once_and_host_is_name() {
+    let (state, clock, fake, dns, pass) = setup_dns(true).await;
+    *fake.instance.lock().unwrap() = Some(inst("running", Some("Online")));
+    assert_eq!(host_of(&state, &pass).await, json!("mc.example.com"));
+    assert_eq!(
+        dns.calls.lock().unwrap().as_slice(),
+        [(
+            "Z123".to_owned(),
+            "mc.example.com".to_owned(),
+            "203.0.113.5".to_owned()
+        )]
+    );
+    // キャッシュが切れたあとでも、同じ IP なら増えない
+    clock.advance(10);
+    assert_eq!(host_of(&state, &pass).await, json!("mc.example.com"));
+    assert_eq!(dns.calls.lock().unwrap().len(), 1);
+    assert_eq!(fake.find_calls.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn dns_is_upserted_again_when_ip_changes() {
+    let (state, clock, fake, dns, pass) = setup_dns(true).await;
+    *fake.instance.lock().unwrap() = Some(inst_ip("running", "203.0.113.5"));
+    host_of(&state, &pass).await;
+    clock.advance(10);
+    *fake.instance.lock().unwrap() = Some(inst_ip("running", "198.51.100.7"));
+    assert_eq!(host_of(&state, &pass).await, json!("mc.example.com"));
+    let calls = dns.calls.lock().unwrap();
+    assert_eq!(calls.len(), 2);
+    assert_eq!(calls[1].2, "198.51.100.7");
+}
+
+#[tokio::test]
+async fn dns_failure_keeps_status_ok_with_empty_host_and_retries() {
+    let (state, clock, fake, dns, pass) = setup_dns(true).await;
+    *fake.instance.lock().unwrap() = Some(inst("running", Some("Online")));
+    *dns.fail.lock().unwrap() = true;
+    let (st, v) = call(&state, "GET", "/api/v1/servers", &pass).await;
+    assert_eq!(st, StatusCode::OK);
+    assert_eq!(v["servers"]["minecraft"]["host"], json!(""));
+    assert_eq!(v["servers"]["minecraft"]["ip"], json!("203.0.113.5"));
+    assert_eq!(v["message"], json!(""));
+    assert!(!v.to_string().contains("AccessDenied"));
+    // 次の status でやり直す
+    clock.advance(10);
+    *dns.fail.lock().unwrap() = false;
+    assert_eq!(host_of(&state, &pass).await, json!("mc.example.com"));
+    assert_eq!(dns.calls.lock().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn dns_off_has_empty_host_and_no_calls() {
+    let (state, _, fake, dns, pass) = setup_dns(false).await;
+    *fake.instance.lock().unwrap() = Some(inst("running", Some("Online")));
+    assert_eq!(host_of(&state, &pass).await, json!(""));
+    assert!(dns.calls.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn dns_is_not_called_unless_running() {
+    for s in ["pending", "stopping", "shutting-down"] {
+        let (state, _, fake, dns, pass) = setup_dns(true).await;
+        *fake.instance.lock().unwrap() = Some(inst(s, None));
+        assert_eq!(host_of(&state, &pass).await, json!(""), "{s}");
+        assert!(dns.calls.lock().unwrap().is_empty(), "{s}");
+    }
 }

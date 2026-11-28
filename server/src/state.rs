@@ -13,7 +13,9 @@ use crate::auth::discord::DiscordOAuth;
 use crate::clock::{Clock, SystemClock};
 use crate::config::Config;
 use crate::middleware::rate_limit::RateLimiter;
-use crate::services::game_servers::{Ec2Backend, GameServerBackend, GameServerService};
+use crate::services::game_servers::{
+    Ec2Backend, GameServerBackend, GameServerService, Route53Updater,
+};
 use crate::services::lol_streak::LolStreakService;
 use crate::services::running_relay::RunningRelay;
 
@@ -70,6 +72,19 @@ impl AppState {
     /// 本番用（`serve` から呼ぶ）。OS の時計と、本物の EC2 を使う。
     pub async fn for_production(config: Config, db: SqlitePool) -> anyhow::Result<AppState> {
         let game_backend: Arc<dyn GameServerBackend> = Arc::new(Ec2Backend::new(&config).await?);
-        Self::new(config, db, Arc::new(SystemClock), game_backend)
+        let dns_on = !config.minecraft_dns_name.is_empty();
+        let dns = if dns_on {
+            Some(Route53Updater::new(&config).await?)
+        } else {
+            None
+        };
+        let backend = game_backend.clone();
+        let mut state = Self::new(config, db, Arc::new(SystemClock), game_backend)?;
+        // 2 項目が空なら DNS の口は持たない（機能オフ）
+        if let Some(dns) = dns {
+            state.game_servers =
+                Arc::new(GameServerService::new(backend, &state.config).with_dns(Arc::new(dns)));
+        }
+        Ok(state)
     }
 }
